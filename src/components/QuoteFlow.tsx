@@ -3,22 +3,36 @@
 import { useMemo, useRef, useState } from "react";
 import { MAX_PHOTOS } from "@/lib/ai/limits";
 import { postJson } from "@/lib/client/api";
+import { saveJob } from "@/lib/client/jobsStore";
 import { preparePhoto, type Photo } from "@/lib/client/photos";
 import { useSettings } from "@/lib/client/settingsStore";
-import { computeQuote, sortedTiers } from "@/lib/pricing/engine";
-import { buildQuoteMessage, type QuoteStyle } from "@/lib/pricing/message";
+import { DEFAULT_DETAILS, trailerCubicYards } from "@/lib/pricing/defaults";
+import { computeQuote, rangeFactors, sortedTiers, unseenPctFor } from "@/lib/pricing/engine";
+import { loadCubicYards, scaleLoadTo } from "@/lib/pricing/estimate";
+import { buildPhotoRequestMessage, buildQuoteMessage, type QuoteStyle } from "@/lib/pricing/message";
 import type { JobDetails, JobEstimate, Quote, Settings } from "@/lib/pricing/types";
-import { buttonClass, Card, money, moneyRange, NumberField, Segmented, Stepper, TextArea, TextField } from "./ui";
-
-const EMPTY_DETAILS: JobDetails = { customerName: "", distanceMiles: 0, stairsFlights: null };
+import { ItemsEditor } from "./ItemsEditor";
+import {
+  buttonClass,
+  Card,
+  money,
+  moneyRange,
+  NumberField,
+  Segmented,
+  Stepper,
+  TextArea,
+  TextField,
+  Toggle,
+} from "./ui";
 
 export function QuoteFlow() {
   const settings = useSettings();
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [notes, setNotes] = useState("");
-  const [details, setDetails] = useState<JobDetails>(EMPTY_DETAILS);
+  const [details, setDetails] = useState<JobDetails>(DEFAULT_DETAILS);
   const [estimate, setEstimate] = useState<JobEstimate | null>(null);
   const [aiEstimate, setAiEstimate] = useState<JobEstimate | null>(null);
+  const [quoteId, setQuoteId] = useState("");
   const [demo, setDemo] = useState(false);
   const [busy, setBusy] = useState<"photos" | "analyzing" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +43,8 @@ export function QuoteFlow() {
     () => (estimate ? computeQuote(settings, estimate, details) : null),
     [settings, estimate, details],
   );
+  const setDetail = <K extends keyof JobDetails>(key: K, value: JobDetails[K]) =>
+    setDetails((d) => ({ ...d, [key]: value }));
 
   async function addPhotos(files: FileList | null) {
     if (!files?.length) return;
@@ -36,8 +52,7 @@ export function QuoteFlow() {
     setBusy("photos");
     try {
       const room = MAX_PHOTOS - photos.length;
-      const picked = Array.from(files).slice(0, room);
-      const prepared = await Promise.all(picked.map(preparePhoto));
+      const prepared = await Promise.all(Array.from(files).slice(0, room).map(preparePhoto));
       setPhotos((p) => [...p, ...prepared]);
       if (files.length > room) setError(`Only ${MAX_PHOTOS} photos per quote — kept the first ${room}.`);
     } catch (e) {
@@ -55,14 +70,15 @@ export function QuoteFlow() {
       const res = await postJson<{ estimate: JobEstimate; demo?: boolean }>("/api/analyze", {
         photos: photos.map(({ mediaType, data }) => ({ mediaType, data })),
         customerNotes: notes,
-        trailer: settings.trailer,
-        itemFees: settings.itemFees.map(({ id, name, hint }) => ({ id, name, hint })),
+        trailer: { name: settings.trailer.name, cubicYards: Math.round(trailerCubicYards(settings.trailer) * 10) / 10 },
+        itemFees: settings.itemFees.map(({ id, name, hint, pricing }) => ({ id, name, hint, pricing })),
         prohibitedItems: settings.prohibitedItems,
       });
       setEstimate(res.estimate);
       setAiEstimate(res.estimate);
+      setQuoteId(crypto.randomUUID());
       setDemo(Boolean(res.demo));
-      setDetails((d) => ({ ...d, stairsFlights: null }));
+      setDetails((d) => ({ ...d, stairsFlights: null, unseenPct: null }));
       requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
@@ -74,15 +90,34 @@ export function QuoteFlow() {
   function reset() {
     setPhotos([]);
     setNotes("");
-    setDetails(EMPTY_DETAILS);
+    setDetails(DEFAULT_DETAILS);
     setEstimate(null);
     setAiEstimate(null);
     setError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function recordSent(sentPrice: number | null) {
+    if (!estimate || !quote || !aiEstimate) return;
+    saveJob({
+      id: quoteId,
+      createdAt: new Date().toISOString(),
+      customerName: details.customerName,
+      summary: estimate.summary,
+      priceLow: quote.total.low,
+      priceHigh: quote.total.high,
+      sentPrice,
+      aiLoadCubicYards: loadCubicYards(aiEstimate, settings),
+      quotedLoadCubicYards: loadCubicYards(estimate, settings),
+      trailerCubicYards: trailerCubicYards(settings.trailer),
+      outcome: null,
+    });
+  }
+
   return (
     <div className="space-y-4">
+      <PhotoRequest settings={settings} />
+
       <Card title="Customer photos" subtitle="Add the pictures your customer sent. More angles = better estimate.">
         <div className="grid grid-cols-3 gap-2">
           {photos.map((p, i) => (
@@ -125,7 +160,7 @@ export function QuoteFlow() {
         <div className="space-y-3">
           <TextArea
             label="What the customer said"
-            placeholder="e.g. Everything in the garage plus a mattress upstairs. Ground floor, easy driveway access."
+            placeholder="e.g. Everything in the garage plus a mattress upstairs. Easy driveway access."
             value={notes}
             onChange={setNotes}
             rows={3}
@@ -135,16 +170,58 @@ export function QuoteFlow() {
               label="Customer name"
               placeholder="Optional"
               value={details.customerName}
-              onChange={(customerName) => setDetails((d) => ({ ...d, customerName }))}
+              onChange={(v) => setDetail("customerName", v)}
             />
             <NumberField
               label="Distance"
               suffix="mi"
               value={details.distanceMiles}
-              onChange={(distanceMiles) => setDetails((d) => ({ ...d, distanceMiles }))}
+              onChange={(v) => setDetail("distanceMiles", v)}
               hint="One way from your base"
             />
+            <NumberField
+              label="Carry from truck"
+              suffix="ft"
+              value={details.carryFeet}
+              onChange={(v) => setDetail("carryFeet", v)}
+              hint={`First ${settings.charges.freeCarryFeet} ft included`}
+            />
           </div>
+          <details className="rounded-xl bg-stone-50 px-3 py-1">
+            <summary className="cursor-pointer py-2 text-sm font-medium text-stone-700">Job options</summary>
+            <div className="divide-y divide-stone-200">
+              <Toggle
+                label="Same-day service"
+                hint={`+${money(settings.charges.sameDayFee)}`}
+                checked={details.sameDay}
+                onChange={(v) => setDetail("sameDay", v)}
+              />
+              <Toggle
+                label="After-hours or weekend"
+                hint={`+${settings.charges.afterHoursPct}%`}
+                checked={details.afterHours}
+                onChange={(v) => setDetail("afterHours", v)}
+              />
+              <Toggle
+                label="Packed rooms / heavy sorting"
+                hint={`Hoarder-style jobs, +${settings.charges.hoarderPct}%`}
+                checked={details.hoarder}
+                onChange={(v) => setDetail("hoarder", v)}
+              />
+              <Toggle
+                label="Came from a paid lead"
+                hint="Counts marketing cost in the profit check"
+                checked={details.paidLead}
+                onChange={(v) => setDetail("paidLead", v)}
+              />
+              <Toggle
+                label="Shares a dump run with other jobs"
+                hint="Small jobs on the same trip split the dump time"
+                checked={details.sharedDumpRun}
+                onChange={(v) => setDetail("sharedDumpRun", v)}
+              />
+            </div>
+          </details>
         </div>
       </Card>
 
@@ -170,28 +247,35 @@ export function QuoteFlow() {
           "Price this job"
         )}
       </button>
-      {busy === "analyzing" && (
-        <p className="text-center text-sm text-stone-500">Usually takes 15–40 seconds.</p>
-      )}
+      {busy === "analyzing" && <p className="text-center text-sm text-stone-500">Usually takes 15–40 seconds.</p>}
 
       {estimate && quote && (
         <div ref={resultsRef} className="scroll-mt-20 space-y-4 pt-2">
-          <PriceHero quote={quote} estimate={estimate} demo={demo} />
+          <PriceHero quote={quote} estimate={estimate} settings={settings} demo={demo} />
           {quote.warnings.length > 0 && <Warnings warnings={quote.warnings} />}
           <WhatWeSaw estimate={estimate} />
-          <Adjust
+          <ItemsEditor
             settings={settings}
             estimate={estimate}
             onChange={setEstimate}
-            details={details}
-            onDetailsChange={setDetails}
-            onReset={aiEstimate ? () => {
-              setEstimate(aiEstimate);
-              setDetails((d) => ({ ...d, stairsFlights: null }));
-            } : undefined}
+            onReset={
+              aiEstimate
+                ? () => {
+                    setEstimate(aiEstimate);
+                    setDetails((d) => ({ ...d, stairsFlights: null, unseenPct: null }));
+                  }
+                : undefined
+            }
           />
+          <Adjust settings={settings} estimate={estimate} onChange={setEstimate} details={details} onDetailsChange={setDetails} />
           <Breakdown quote={quote} settings={settings} />
-          <CustomerMessage settings={settings} estimate={estimate} details={details} quote={quote} />
+          <CustomerMessage
+            settings={settings}
+            estimate={estimate}
+            details={details}
+            quote={quote}
+            onSent={recordSent}
+          />
           <button type="button" className={`${buttonClass.secondary} w-full`} onClick={reset}>
             Start a new quote
           </button>
@@ -205,15 +289,69 @@ function Spinner() {
   return <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden />;
 }
 
+function CopyButton({ text, label = "Copy", onCopied }: { text: string; label?: string; onCopied?: () => void }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className={buttonClass.primary}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          onCopied?.();
+          setTimeout(() => setCopied(false), 2000);
+        } catch {
+          // Clipboard blocked: the text is still selectable in the box.
+        }
+      }}
+    >
+      {copied ? "Copied ✓" : label}
+    </button>
+  );
+}
+
+function PhotoRequest({ settings }: { settings: Settings }) {
+  const message = buildPhotoRequestMessage(settings);
+  return (
+    <details className="rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
+      <summary className="cursor-pointer text-sm font-semibold text-stone-800">
+        Customer asking for a quote? Send them this first
+      </summary>
+      <p className="mt-2 text-sm text-stone-500">
+        Good photos and answers up front make the price hold on site. Edit the questions in My rates.
+      </p>
+      <pre className="mt-3 rounded-xl bg-stone-50 p-3 font-sans text-sm whitespace-pre-wrap text-stone-800">{message}</pre>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <CopyButton text={message} />
+        <a className={buttonClass.secondary} href={`sms:?&body=${encodeURIComponent(message)}`}>
+          Text it
+        </a>
+      </div>
+    </details>
+  );
+}
+
 const confidenceStyle = {
   high: "bg-emerald-100 text-emerald-800",
   medium: "bg-amber-100 text-amber-800",
   low: "bg-red-100 text-red-800",
 };
 
-function PriceHero({ quote, estimate, demo }: { quote: Quote; estimate: JobEstimate; demo: boolean }) {
-  const fill = Math.min(1, quote.volume.trailerFraction.high);
-  const fillLow = Math.min(1, quote.volume.trailerFraction.low);
+function PriceHero({
+  quote,
+  estimate,
+  settings,
+  demo,
+}: {
+  quote: Quote;
+  estimate: JobEstimate;
+  settings: Settings;
+  demo: boolean;
+}) {
+  const capacity = trailerCubicYards(settings.trailer);
+  const fillLow = Math.min(1, quote.volume.totalCubicYards.low / capacity);
+  const fillHigh = Math.min(1, quote.volume.totalCubicYards.high / capacity);
   return (
     <section className="rounded-2xl bg-stone-900 p-5 text-white shadow">
       <div className="flex items-center justify-between gap-2">
@@ -227,18 +365,19 @@ function PriceHero({ quote, estimate, demo }: { quote: Quote; estimate: JobEstim
       </div>
       <p className="mt-1 text-4xl font-bold tracking-tight tabular-nums">{moneyRange(quote.total.low, quote.total.high)}</p>
       <p className="mt-1 text-sm text-stone-300">
-        {quote.volume.tierLabel}
+        {quote.volume.tierLabel || "Flat-rate items only"}
         {quote.total.low !== quote.total.high && <> · middle: {money(quote.suggested)}</>}
         {quote.minimumApplied && <> · minimum charge applied</>}
       </p>
       <div className="mt-4">
         <div className="relative h-3 overflow-hidden rounded-full bg-white/15" aria-hidden>
-          <div className="absolute inset-y-0 left-0 bg-orange-500/50" style={{ width: `${fill * 100}%` }} />
+          <div className="absolute inset-y-0 left-0 bg-orange-500/50" style={{ width: `${fillHigh * 100}%` }} />
           <div className="absolute inset-y-0 left-0 bg-orange-500" style={{ width: `${fillLow * 100}%` }} />
         </div>
         <p className="mt-1.5 text-xs text-stone-400">
-          Trailer fill: {pct(quote.volume.trailerFraction.low)}–{pct(quote.volume.trailerFraction.high)}
-          {quote.volume.loads > 1 && ` (${quote.volume.loads} loads)`}
+          Trailer space: {pct(quote.volume.totalCubicYards.low / capacity)}–{pct(quote.volume.totalCubicYards.high / capacity)}
+          {quote.volume.loads > 1 && ` · ${quote.volume.loads} loads`}
+          {quote.volume.unseenPct > 0 && ` · includes +${quote.volume.unseenPct}% for unseen items`}
         </p>
       </div>
     </section>
@@ -267,20 +406,7 @@ function WhatWeSaw({ estimate }: { estimate: JobEstimate }) {
   return (
     <Card title="What the AI saw">
       <p className="text-sm text-stone-700">{estimate.summary}</p>
-      {estimate.items.length > 0 && (
-        <ul className="mt-3 divide-y divide-stone-100 text-sm">
-          {estimate.items.map((item, i) => (
-            <li key={i} className="flex justify-between gap-3 py-1.5">
-              <span className="text-stone-800">
-                {item.quantity > 1 && <span className="font-semibold">{item.quantity}× </span>}
-                {item.description}
-              </span>
-              <span className="whitespace-nowrap text-stone-500 tabular-nums">{round1(item.cubicYards)} yd³</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {estimate.accessNotes && <p className="mt-3 text-sm text-stone-500">Access: {estimate.accessNotes}</p>}
+      {estimate.accessNotes && <p className="mt-2 text-sm text-stone-500">Access: {estimate.accessNotes}</p>}
       {estimate.questionsForCustomer.length > 0 && (
         <div className="mt-3 rounded-lg bg-stone-50 p-3">
           <p className="text-xs font-semibold tracking-wide text-stone-500 uppercase">Worth asking the customer</p>
@@ -295,124 +421,74 @@ function WhatWeSaw({ estimate }: { estimate: JobEstimate }) {
   );
 }
 
-const round1 = (n: number) => Math.round(n * 10) / 10;
-
 function Adjust({
   settings,
   estimate,
   onChange,
   details,
   onDetailsChange,
-  onReset,
 }: {
   settings: Settings;
   estimate: JobEstimate;
   onChange: (e: JobEstimate) => void;
   details: JobDetails;
   onDetailsChange: (d: JobDetails) => void;
-  onReset?: () => void;
 }) {
-  const set = (patch: Partial<JobEstimate>) => onChange({ ...estimate, ...patch });
-  const qty = (id: string) => estimate.feeItems.find((f) => f.itemId === id)?.quantity ?? 0;
-  const setQty = (id: string, quantity: number) => {
-    const rest = estimate.feeItems.filter((f) => f.itemId !== id);
-    set({ feeItems: quantity > 0 ? [...rest, { itemId: id, quantity, note: "" }] : rest });
-  };
-  const capacity = settings.trailer.cubicYards;
+  const capacity = trailerCubicYards(settings.trailer);
+  const auto = unseenPctFor(settings, estimate, { ...details, unseenPct: null });
+  const cushion = details.unseenPct === null ? "auto" : String(details.unseenPct);
 
   return (
-    <Card
-      title="Adjust the estimate"
-      subtitle="You know the job — fix anything the AI got wrong and the price updates."
-      action={
-        onReset && (
-          <button type="button" className={buttonClass.ghost} onClick={onReset}>
-            Undo edits
-          </button>
-        )
-      }
-    >
+    <Card title="Adjust the job" subtitle="Quick fixes. The price updates as you go.">
       <div className="space-y-5">
         <div>
-          <p className="mb-2 text-sm font-medium text-stone-700">Set the load size</p>
+          <p className="mb-2 text-sm font-medium text-stone-700">It&apos;s really about…</p>
           <div className="flex flex-wrap gap-2">
             {sortedTiers(settings.loadTiers).map((t) => (
               <button
                 key={t.id}
                 type="button"
                 className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 active:bg-stone-100"
-                onClick={() => {
-                  const cy = round1(t.fraction * capacity);
-                  const ratio = estimate.volumeCubicYardsHigh > 0 ? cy / estimate.volumeCubicYardsHigh : 1;
-                  set({
-                    volumeCubicYardsLow: cy,
-                    volumeCubicYardsHigh: cy,
-                    weightLbsLow: Math.round(estimate.weightLbsHigh * ratio),
-                    weightLbsHigh: Math.round(estimate.weightLbsHigh * ratio),
-                  });
-                }}
+                // The tier tapped becomes the top of the range, so the quote reads as that load size.
+                onClick={() =>
+                  onChange(scaleLoadTo(estimate, settings, (t.fraction * capacity) / rangeFactors(settings, estimate, details).high))
+                }
               >
                 {t.label}
               </button>
             ))}
           </div>
+          <p className="mt-1 text-xs text-stone-500">
+            Sets the top of the range to that load and resizes everything priced by the load. Flat-rate items stay as they are.
+          </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <NumberField
-            label="Volume (low)"
-            suffix="yd³"
-            value={round1(estimate.volumeCubicYardsLow)}
-            onChange={(v) => set({ volumeCubicYardsLow: v, volumeCubicYardsHigh: Math.max(v, estimate.volumeCubicYardsHigh) })}
-          />
-          <NumberField
-            label="Volume (high)"
-            suffix="yd³"
-            value={round1(estimate.volumeCubicYardsHigh)}
-            onChange={(v) => set({ volumeCubicYardsHigh: v, volumeCubicYardsLow: Math.min(v, estimate.volumeCubicYardsLow) })}
-          />
-          <NumberField
-            label="Weight (low)"
-            suffix="lbs"
-            value={Math.round(estimate.weightLbsLow)}
-            onChange={(v) => set({ weightLbsLow: v, weightLbsHigh: Math.max(v, estimate.weightLbsHigh) })}
-          />
-          <NumberField
-            label="Weight (high)"
-            suffix="lbs"
-            value={Math.round(estimate.weightLbsHigh)}
-            onChange={(v) => set({ weightLbsHigh: v, weightLbsLow: Math.min(v, estimate.weightLbsLow) })}
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm text-stone-900">Flights of stairs</p>
+            <p className="text-xs text-stone-500">{details.stairsFlights === null ? "AI's read from the photos" : "Set by you"}</p>
+          </div>
+          <Stepper
+            label="flights of stairs"
+            value={details.stairsFlights ?? estimate.stairsFlights}
+            onChange={(stairsFlights) => onDetailsChange({ ...details, stairsFlights })}
           />
         </div>
 
         <div>
-          <p className="mb-1 text-sm font-medium text-stone-700">Extra-charge items</p>
-          <ul className="divide-y divide-stone-100">
-            {settings.itemFees.map((fee) => (
-              <li key={fee.id} className="flex items-center justify-between gap-3 py-2">
-                <div className="min-w-0">
-                  <p className={`text-sm ${qty(fee.id) > 0 ? "font-semibold text-stone-900" : "text-stone-600"}`}>{fee.name}</p>
-                  <p className="text-xs text-stone-500">
-                    {fee.onSiteQuote ? "On-site quote" : fee.priceLow === fee.priceHigh ? `${money(fee.priceLow)} each` : `${money(fee.priceLow)}–${money(fee.priceHigh)} each`}
-                  </p>
-                </div>
-                <Stepper label={fee.name} value={qty(fee.id)} onChange={(v) => setQty(fee.id, v)} />
-              </li>
-            ))}
-            <li className="flex items-center justify-between gap-3 py-2">
-              <div>
-                <p className="text-sm text-stone-900">Flights of stairs</p>
-                <p className="text-xs text-stone-500">
-                  {details.stairsFlights === null ? "AI's read from the photos" : "Set by you"}
-                </p>
-              </div>
-              <Stepper
-                label="flights of stairs"
-                value={details.stairsFlights ?? estimate.stairsFlights}
-                onChange={(stairsFlights) => onDetailsChange({ ...details, stairsFlights })}
-              />
-            </li>
-          </ul>
+          <p className="mb-1 text-sm font-medium text-stone-700">Cushion for things not in the photos</p>
+          <Segmented
+            label="Cushion for unseen items"
+            value={cushion}
+            onChange={(v) => onDetailsChange({ ...details, unseenPct: v === "auto" ? null : Number(v) })}
+            options={[
+              { value: "auto", label: `Auto (${auto}%)` },
+              { value: "0", label: "None" },
+              { value: "10", label: "10%" },
+              { value: "20", label: "20%" },
+            ]}
+          />
+          <p className="mt-1 text-xs text-stone-500">Raises the top of the range only. Auto uses more for multi-room jobs and unclear photos.</p>
         </div>
 
         {estimate.prohibitedItems.length > 0 && (
@@ -425,7 +501,9 @@ function Adjust({
                   <button
                     type="button"
                     className="text-xs font-semibold text-red-700"
-                    onClick={() => set({ prohibitedItems: estimate.prohibitedItems.filter((_, j) => j !== i) })}
+                    onClick={() =>
+                      onChange({ ...estimate, prohibitedItems: estimate.prohibitedItems.filter((_, j) => j !== i) })
+                    }
                   >
                     Not an issue
                   </button>
@@ -441,11 +519,12 @@ function Adjust({
 
 function Breakdown({ quote, settings }: { quote: Quote; settings: Settings }) {
   const row = "flex justify-between gap-3 py-1.5 text-sm";
+  const { costs } = settings;
   return (
     <Card title="Price breakdown">
       <ul className="divide-y divide-stone-100">
-        {quote.lines.map((l) => (
-          <li key={l.label} className={row}>
+        {quote.lines.map((l, i) => (
+          <li key={`${l.label}-${i}`} className={row}>
             <div className="min-w-0">
               <p className="text-stone-900">{l.label}</p>
               <p className="text-xs text-stone-500">{l.detail}</p>
@@ -467,30 +546,54 @@ function Breakdown({ quote, settings }: { quote: Quote; settings: Settings }) {
 
       <details className="mt-4 rounded-xl bg-stone-50 p-3">
         <summary className="cursor-pointer text-sm font-semibold text-stone-800">
-          Profit check: {moneyRange(quote.profit.low, quote.profit.high)} ({Math.round(quote.margin.low)}–{Math.round(quote.margin.high)}%)
+          Profit check: {moneyRange(quote.profit.low, quote.profit.high)} ({Math.round(quote.margin.low)}–
+          {Math.round(quote.margin.high)}%)
         </summary>
         <ul className="mt-2 divide-y divide-stone-200 text-sm">
-          <CostRow label={settings.costs.dumpFeeMethod === "per_ton" ? "Dump fees (by weight)" : "Dump fees (by volume)"} low={quote.cost.dump.low} high={quote.cost.dump.high} />
-          <CostRow label={`Labor (${settings.costs.crewSize}-person crew, incl. drive)`} low={quote.cost.labor.low} high={quote.cost.labor.high} />
-          <CostRow label="Truck & fuel" low={quote.cost.vehicle} high={quote.cost.vehicle} />
-          {quote.cost.disposal.high > 0 && <CostRow label="Item disposal fees" low={quote.cost.disposal.low} high={quote.cost.disposal.high} />}
-          <CostRow label="Overhead" low={quote.cost.overhead} high={quote.cost.overhead} />
+          <CostRow
+            label={costs.dumpFeeMethod === "per_ton" ? "Dump fees (by weight)" : "Dump fees (by volume)"}
+            value={quote.cost.dump}
+          />
+          <CostRow
+            label={`Crew: ${costs.crewSize} × ${hoursText(quote.truckHours)} incl. drive & dump run`}
+            value={quote.cost.labor}
+          />
+          <CostRow label="Truck & fuel" value={quote.cost.vehicle} />
+          {quote.cost.disposal > 0 && <CostRow label="Item disposal fees" value={quote.cost.disposal} />}
+          <CostRow label={`Card fees (${costs.cardFeePct}%)`} value={quote.cost.cardFees} />
+          <CostRow label="Overhead" value={quote.cost.overhead} />
+          {quote.cost.marketing > 0 && <CostRow label="Marketing (paid lead)" value={quote.cost.marketing} />}
           <li className="flex justify-between py-1.5 font-semibold">
             <span>Your cost</span>
             <span className="tabular-nums">{moneyRange(quote.cost.total.low, quote.cost.total.high)}</span>
           </li>
+          <li className="flex justify-between py-1.5">
+            <span className="text-stone-700">Revenue per truck-hour</span>
+            <span className="tabular-nums">
+              {moneyRange(quote.revenuePerTruckHour.low, quote.revenuePerTruckHour.high)}
+            </span>
+          </li>
         </ul>
-        <p className="mt-2 text-xs text-stone-500">Based on the costs in My rates. Target margin: {settings.costs.targetMarginPct}%.</p>
+        <p className="mt-2 text-xs text-stone-500">
+          Based on the costs in My rates. Targets: {costs.targetMarginPct}% margin, {money(costs.targetRevenuePerTruckHour)} per
+          truck-hour.
+        </p>
       </details>
     </Card>
   );
 }
 
-function CostRow({ label, low, high }: { label: string; low: number; high: number }) {
+const hoursText = (r: { low: number; high: number }) => {
+  const f = (n: number) => (Math.round(n * 10) / 10).toString();
+  return f(r.low) === f(r.high) ? `${f(r.low)} h` : `${f(r.low)}–${f(r.high)} h`;
+};
+
+function CostRow({ label, value }: { label: string; value: number | { low: number; high: number } }) {
+  const r = typeof value === "number" ? { low: value, high: value } : value;
   return (
     <li className="flex justify-between gap-3 py-1.5">
       <span className="text-stone-700">{label}</span>
-      <span className="whitespace-nowrap tabular-nums">{moneyRange(low, high)}</span>
+      <span className="whitespace-nowrap tabular-nums">{moneyRange(r.low, r.high)}</span>
     </li>
   );
 }
@@ -500,35 +603,27 @@ function CustomerMessage({
   estimate,
   details,
   quote,
+  onSent,
 }: {
   settings: Settings;
   estimate: JobEstimate;
   details: JobDetails;
   quote: Quote;
+  onSent: (sentPrice: number | null) => void;
 }) {
   const [style, setStyle] = useState<QuoteStyle>("range");
   const [price, setPrice] = useState<number | null>(null);
   // Hand edits stick until the generated message changes underneath them.
   const [edit, setEdit] = useState<{ base: string; text: string } | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const singlePrice = price ?? quote.suggested;
   const generated = buildQuoteMessage(settings, estimate, details, quote, style, singlePrice);
   const message = edit?.base === generated ? edit.text : generated;
   const canShare = typeof navigator !== "undefined" && "share" in navigator;
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(message);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard blocked: the text is still selectable in the box.
-    }
-  }
+  const sent = () => onSent(style === "single" ? singlePrice : null);
 
   return (
-    <Card title="Send the quote" subtitle="Edit anything before sending.">
+    <Card title="Send the quote" subtitle="Edit anything before sending. Sent quotes are saved under Jobs.">
       <div className="space-y-3">
         <Segmented
           label="Quote style"
@@ -544,15 +639,22 @@ function CustomerMessage({
         )}
         <TextArea label="Message" value={message} onChange={(text) => setEdit({ base: generated, text })} rows={9} />
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" className={buttonClass.primary} onClick={copy}>
-            {copied ? "Copied ✓" : "Copy"}
-          </button>
+          <CopyButton text={message} onCopied={sent} />
           {canShare ? (
-            <button type="button" className={buttonClass.secondary} onClick={() => navigator.share({ text: message }).catch(() => {})}>
+            <button
+              type="button"
+              className={buttonClass.secondary}
+              onClick={() =>
+                navigator
+                  .share({ text: message })
+                  .then(sent)
+                  .catch(() => {})
+              }
+            >
               Share…
             </button>
           ) : (
-            <a className={buttonClass.secondary} href={`sms:?&body=${encodeURIComponent(message)}`}>
+            <a className={buttonClass.secondary} href={`sms:?&body=${encodeURIComponent(message)}`} onClick={sent}>
               Text it
             </a>
           )}

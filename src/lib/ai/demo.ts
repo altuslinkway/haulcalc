@@ -7,23 +7,19 @@ import type { RateCard } from "./schemas";
 export const DEMO_ESTIMATE: JobEstimate = {
   summary:
     "Garage cleanout: a worn sectional, a queen mattress and box spring, an old fridge, about a dozen boxes and bags, plus a couple of paint cans on the shelf.",
-  items: [
-    { description: "Sectional sofa", quantity: 1, cubicYards: 3.5 },
-    { description: "Queen mattress and box spring", quantity: 2, cubicYards: 1.5 },
-    { description: "Refrigerator", quantity: 1, cubicYards: 1.75 },
-    { description: "Moving boxes and contractor bags", quantity: 14, cubicYards: 1.75 },
-    { description: "Loose garage clutter (bikes, shelving, lumber scraps)", quantity: 1, cubicYards: 1.5 },
+  lines: [
+    { id: "demo-1", description: "Sectional sofa", quantity: 1, cubicYards: 3.5, weightLbs: 250, material: "household", itemId: null },
+    { id: "demo-2", description: "Queen mattress and box spring", quantity: 2, cubicYards: 1.5, weightLbs: 150, material: "household", itemId: null },
+    { id: "demo-3", description: "Refrigerator", quantity: 1, cubicYards: 1.75, weightLbs: 250, material: "household", itemId: "appliance" },
+    { id: "demo-4", description: "Moving boxes and contractor bags", quantity: 14, cubicYards: 1.75, weightLbs: 350, material: "household", itemId: null },
+    { id: "demo-5", description: "Loose garage clutter (bikes, shelving)", quantity: 1, cubicYards: 1.5, weightLbs: 250, material: "household", itemId: null },
+    { id: "demo-6", description: "Lumber scraps by the back wall", quantity: 1, cubicYards: 0.5, weightLbs: 150, material: "construction", itemId: null },
   ],
-  feeItems: [
-    { itemId: "couch", quantity: 1, note: "Large L-shaped sectional" },
-    { itemId: "mattress", quantity: 2, note: "Queen mattress and box spring" },
-    { itemId: "appliance", quantity: 1, note: "Top-freezer refrigerator" },
-    { itemId: "freon", quantity: 1, note: "Refrigerator holds refrigerant" },
+  addOns: [
+    { itemId: "mattress", quantity: 2 },
+    { itemId: "freon", quantity: 1 },
   ],
-  volumeCubicYardsLow: 9,
-  volumeCubicYardsHigh: 11,
-  weightLbsLow: 1500,
-  weightLbsHigh: 2100,
+  scope: "single_area",
   prohibitedItems: [{ name: "Two gallon paint cans", reason: "Liquids aren't accepted" }],
   stairsFlights: 0,
   accessNotes: "Everything is in an open garage with driveway access.",
@@ -40,8 +36,9 @@ export const DEMO_RATE_CARD: RateCard = {
     { label: "Full Load", fraction: 1, description: "", price_low: 450, price_high: 650 },
   ],
   item_fees: [
-    { name: "Mattress", price_low: 45, price_high: 45, on_site_quote: false, hint: "Each mattress or box spring." },
-    { name: "Tires", price_low: 15, price_high: 15, on_site_quote: false, hint: "Each car or truck tire." },
+    { name: "Mattress", pricing: "addon", price_low: 25, price_high: 25, cubic_yards_each: 0.75, lbs_each: 80, hint: "Each mattress or box spring." },
+    { name: "Refrigerator", pricing: "flat", price_low: 110, price_high: 110, cubic_yards_each: 1.5, lbs_each: 250, hint: "Fridges and freezers, freon removal included." },
+    { name: "Tires", pricing: "addon", price_low: 15, price_high: 15, cubic_yards_each: 0.2, lbs_each: 25, hint: "Each car or truck tire." },
   ],
   prohibited_items: ["Paint", "Chemicals", "Propane tanks"],
   minimum_charge: 95,

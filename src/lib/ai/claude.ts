@@ -92,7 +92,7 @@ export async function analyzePhotos(req: AnalyzeRequest): Promise<JobEstimate> {
     [...photoBlocks(req.photos), { type: "text", text: photoAnalysisInstructions(req) }],
     betaZodOutputFormat(PhotoAnalysisSchema),
   );
-  return toEstimate(analysis, new Set(req.itemFees.map((f) => f.id)));
+  return toEstimate(analysis, req.itemFees);
 }
 
 export async function readRateCard(photos: Photo[]): Promise<RateCard> {
@@ -103,29 +103,32 @@ export async function readRateCard(photos: Photo[]): Promise<RateCard> {
   );
 }
 
-/** Map the model's answer onto app types, guarding against impossible numbers. */
-export function toEstimate(a: PhotoAnalysis, feeIds: Set<string>): JobEstimate {
+/** Map the model's answer onto app types, guarding against impossible numbers and unknown ids. */
+export function toEstimate(a: PhotoAnalysis, itemFees: AnalyzeRequest["itemFees"]): JobEstimate {
   const pos = (n: number) => (Number.isFinite(n) && n > 0 ? n : 0);
-  const count = (n: number) => Math.max(0, Math.round(pos(n)));
-  const [volLow, volHigh] = [pos(a.volume_cubic_yards_low), pos(a.volume_cubic_yards_high)].sort((x, y) => x - y);
-  const [wLow, wHigh] = [pos(a.weight_lbs_low), pos(a.weight_lbs_high)].sort((x, y) => x - y);
+  const count = (n: number) => Math.max(1, Math.round(pos(n)));
+  const special = new Set(itemFees.filter((f) => f.pricing !== "addon").map((f) => f.id));
+  const addOnIds = new Set(itemFees.filter((f) => f.pricing === "addon").map((f) => f.id));
 
   return {
     summary: a.summary,
-    items: a.items.map((i) => ({
-      description: i.description,
-      quantity: count(i.quantity),
-      cubicYards: pos(i.cubic_yards_total),
-    })),
-    feeItems: a.fee_items
-      .filter((f) => feeIds.has(f.item_id) && f.quantity > 0)
-      .map((f) => ({ itemId: f.item_id, quantity: count(f.quantity), note: f.note })),
-    volumeCubicYardsLow: volLow,
-    volumeCubicYardsHigh: volHigh,
-    weightLbsLow: wLow,
-    weightLbsHigh: wHigh,
+    lines: a.lines
+      .filter((l) => pos(l.cubic_yards_total) > 0 || special.has(l.flat_rate_item_id))
+      .map((l, i) => ({
+        id: `ai-${i}`,
+        description: l.description,
+        quantity: count(l.quantity),
+        cubicYards: pos(l.cubic_yards_total),
+        weightLbs: Math.round(pos(l.weight_lbs_total)),
+        material: l.material,
+        itemId: special.has(l.flat_rate_item_id) ? l.flat_rate_item_id : null,
+      })),
+    addOns: a.add_ons
+      .filter((x) => addOnIds.has(x.item_id) && x.quantity > 0)
+      .map((x) => ({ itemId: x.item_id, quantity: Math.round(x.quantity) })),
+    scope: a.scope,
     prohibitedItems: a.prohibited_items,
-    stairsFlights: count(a.stairs_flights),
+    stairsFlights: Math.round(pos(a.stairs_flights)),
     accessNotes: a.access_notes,
     confidence: a.confidence,
     questionsForCustomer: a.questions_for_customer.slice(0, 3),

@@ -53,10 +53,12 @@ export function applyRateCard(settings: Settings, card: RateCard): Settings {
       return {
         id: ids[i],
         name: f.name,
+        pricing: f.pricing,
         priceLow: Math.min(f.price_low, f.price_high),
         priceHigh: Math.max(f.price_low, f.price_high),
-        onSiteQuote: f.on_site_quote,
         disposalCost: existing?.disposalCost ?? 0,
+        cubicYardsEach: Math.max(0, f.cubic_yards_each),
+        lbsEach: Math.max(0, f.lbs_each),
         hint: f.hint,
       };
     });

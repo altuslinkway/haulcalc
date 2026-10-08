@@ -229,7 +229,65 @@ export const buttonClass = {
   ghost: "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-sm font-medium text-orange-700 active:bg-orange-50",
 };
 
-export const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+export { money, moneyRange } from "@/lib/format";
 
-export const moneyRange = (low: number, high: number) =>
-  Math.round(low) === Math.round(high) ? money(low) : `${money(low)} – ${money(high)}`;
+/** A labeled on/off switch row. */
+export function Toggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start justify-between gap-3 py-2">
+      <span className="min-w-0">
+        <span className="block text-sm text-stone-900">{label}</span>
+        {hint && <span className="block text-xs text-stone-500">{hint}</span>}
+      </span>
+      <input
+        type="checkbox"
+        role="switch"
+        className="peer sr-only"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span
+        aria-hidden
+        className="relative mt-0.5 h-6 w-11 shrink-0 rounded-full bg-stone-300 transition peer-checked:bg-orange-600 peer-focus-visible:ring-2 peer-focus-visible:ring-orange-500/40 after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-5"
+      />
+    </label>
+  );
+}
+
+export function Select<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+  hint,
+}: {
+  label: string;
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string }[];
+  hint?: string;
+}) {
+  return (
+    <Field label={label} hint={hint}>
+      {(id) => (
+        <select id={id} className={inputClass} value={value} onChange={(e) => onChange(e.target.value as T)}>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
+  );
+}

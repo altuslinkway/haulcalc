@@ -1,3 +1,4 @@
+import { specialItem } from "./engine";
 import type { JobDetails, JobEstimate, Quote, Settings } from "./types";
 
 export type QuoteStyle = "range" | "single";
@@ -16,14 +17,13 @@ export function buildQuoteMessage(
   const greeting = details.customerName.trim() ? `Hi ${details.customerName.trim()}!` : "Hi!";
   const from = settings.businessName.trim() ? ` This is ${settings.businessName.trim()}.` : "";
 
-  const priceText =
-    style === "single" || quote.total.low === quote.total.high
-      ? money(price ?? quote.suggested)
-      : `${money(quote.total.low)}–${money(quote.total.high)}`;
+  const single = style === "single" || quote.total.low === quote.total.high;
+  const priceText = single ? money(price ?? quote.suggested) : `${money(quote.total.low)}–${money(quote.total.high)}`;
 
+  const size = quote.volume.tierLabel ? ` (about ${quote.volume.tierLabel.toLowerCase()} of our trailer)` : "";
   const parts = [
     `${greeting}${from} Thanks for sending the photos.`,
-    `Based on what we can see (${quote.volume.tierLabel.toLowerCase()} of our trailer), your price is ${priceText}, including labor, loading, hauling and disposal.`,
+    `Based on what we can see${size}, your price is ${priceText}, including labor, loading, hauling and disposal.`,
   ];
 
   const prohibited = estimate.prohibitedItems.map((p) => midSentence(p.name));
@@ -31,10 +31,9 @@ export function buildQuoteMessage(
     parts.push(`Heads up: we can't take ${joinList(prohibited)}, so please set those aside.`);
   }
 
-  const onSite = estimate.feeItems
-    .map((f) => settings.itemFees.find((i) => i.id === f.itemId))
-    .filter((fee) => fee?.onSiteQuote)
-    .map((fee) => fee!.name.toLowerCase());
+  const onSite = estimate.lines
+    .filter((l) => specialItem(l, settings)?.pricing === "onsite")
+    .map((l) => midSentence(l.description));
   if (onSite.length > 0) {
     parts.push(`The ${joinList(onSite)} will be priced on site.`);
   }
@@ -43,8 +42,27 @@ export function buildQuoteMessage(
     parts.push(`A quick question so we get it right: ${estimate.questionsForCustomer[0]}`);
   }
 
-  parts.push("Final price is confirmed on site before we start. Want to get on the schedule?");
+  parts.push(
+    `That covers what's in the photos. We'll confirm the final price on site before we start, and it won't go over ${single ? "that" : "the top of that range"} unless there's more to take. Want to get on the schedule?`,
+  );
   return parts.join("\n\n");
+}
+
+/** What to text a customer who asks for a quote, so the photos are usable. */
+export function buildPhotoRequestMessage(settings: Settings): string {
+  const from = settings.businessName.trim() ? ` from ${settings.businessName.trim()}` : "";
+  const questions = settings.standardQuestions.filter((q) => q.trim());
+  return [
+    `Hi! Thanks for reaching out${from}. To get you an accurate price fast, please text us:`,
+    [
+      "• 2 wide photos of each pile from different angles, with a door or trash can in the shot for scale",
+      "• Close-ups of any appliances, mattresses, TVs, hot tubs or heavy items",
+      "• A photo of the path from the street or driveway to the items",
+    ].join("\n"),
+    questions.length > 0 ? `And let us know:\n${questions.map((q) => `• ${q}`).join("\n")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function joinList(items: string[]): string {

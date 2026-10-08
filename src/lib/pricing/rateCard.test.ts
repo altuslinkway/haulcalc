@@ -10,8 +10,8 @@ const card: RateCard = {
     { label: "Half", fraction: 0.5, description: "", price_low: 350, price_high: 300 },
   ],
   item_fees: [
-    { name: "Mattress / Box Spring", price_low: 50, price_high: 50, on_site_quote: false, hint: "" },
-    { name: "Tires", price_low: 15, price_high: 15, on_site_quote: false, hint: "" },
+    { name: "Mattress / box spring", pricing: "addon", price_low: 50, price_high: 50, cubic_yards_each: 0.75, lbs_each: 80, hint: "" },
+    { name: "Fridge", pricing: "flat", price_low: 130, price_high: 110, cubic_yards_each: 1.5, lbs_each: 250, hint: "" },
   ],
   prohibited_items: ["Paint"],
   minimum_charge: 99,
@@ -27,8 +27,18 @@ describe("applyRateCard", () => {
   });
 
   it("keeps disposal costs for items that carry over", () => {
-    expect(next.itemFees.find((f) => f.name === "Mattress / Box Spring")?.disposalCost).toBe(20);
-    expect(next.itemFees.find((f) => f.name === "Tires")?.disposalCost).toBe(0);
+    expect(next.itemFees.find((f) => f.name === "Mattress / box spring")?.disposalCost).toBe(15);
+    expect(next.itemFees.find((f) => f.name === "Fridge")?.disposalCost).toBe(0);
+  });
+
+  it("keeps each item's pricing kind, size and weight", () => {
+    expect(next.itemFees.find((f) => f.name === "Fridge")).toMatchObject({
+      pricing: "flat",
+      priceLow: 110,
+      priceHigh: 130,
+      cubicYardsEach: 1.5,
+      lbsEach: 250,
+    });
   });
 
   it("copies prohibited items, minimum and business name", () => {
@@ -39,13 +49,13 @@ describe("applyRateCard", () => {
 
   it("leaves costs alone and doesn't mutate the input", () => {
     expect(next.costs).toEqual(DEFAULT_SETTINGS.costs);
-    expect(DEFAULT_SETTINGS.charges.minimumCharge).toBe(75);
+    expect(DEFAULT_SETTINGS.charges.minimumCharge).toBe(99);
   });
 
   it("keeps what the card doesn't mention", () => {
     const sparse = applyRateCard(DEFAULT_SETTINGS, { ...card, load_tiers: [], item_fees: [], minimum_charge: null });
     expect(sparse.loadTiers).toEqual(DEFAULT_SETTINGS.loadTiers);
     expect(sparse.itemFees).toEqual(DEFAULT_SETTINGS.itemFees);
-    expect(sparse.charges.minimumCharge).toBe(75);
+    expect(sparse.charges.minimumCharge).toBe(99);
   });
 });

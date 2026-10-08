@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/", label: "New quote" },
+  { href: "/", label: "Quote" },
+  { href: "/jobs", label: "Jobs" },
   { href: "/settings", label: "My rates" },
 ];
 
@@ -22,7 +23,7 @@ export function Header() {
             <Link
               key={l.href}
               href={l.href}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+              className={`rounded-lg px-2.5 py-1.5 text-sm font-medium ${
                 pathname === l.href ? "bg-white/15 text-white" : "text-stone-300"
               }`}
             >
