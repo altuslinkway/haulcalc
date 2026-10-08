@@ -11,10 +11,10 @@ const fees = [
 const analysis: PhotoAnalysis = {
   summary: "Garage",
   lines: [
-    { description: "Boxes", quantity: 9.6, cubic_yards_total: 1.2, weight_lbs_total: 240.4, material: "household", flat_rate_item_id: "" },
-    { description: "Fridge", quantity: 1, cubic_yards_total: 1.5, weight_lbs_total: 250, material: "household", flat_rate_item_id: "appliance" },
-    { description: "Mattress", quantity: 1, cubic_yards_total: 0.75, weight_lbs_total: 80, material: "household", flat_rate_item_id: "mattress" },
-    { description: "Ghost", quantity: 1, cubic_yards_total: -2, weight_lbs_total: 10, material: "household", flat_rate_item_id: "" },
+    { description: "Boxes", quantity: 9.6, cubic_yards_total: 1.2, weight_lbs_total: 240.4, material: "household", category: "boxes", flat_rate_item_id: "" },
+    { description: "Fridge", quantity: 1, cubic_yards_total: 1.5, weight_lbs_total: 250, material: "household", category: "refrigerator", flat_rate_item_id: "appliance" },
+    { description: "Mattress", quantity: 1, cubic_yards_total: 0.75, weight_lbs_total: 80, material: "household", category: "mattress", flat_rate_item_id: "mattress" },
+    { description: "Ghost", quantity: 1, cubic_yards_total: -2, weight_lbs_total: 10, material: "household", category: "other", flat_rate_item_id: "" },
   ],
   add_ons: [
     { item_id: "mattress", quantity: 1 },
@@ -38,7 +38,7 @@ describe("toEstimate", () => {
       ["Fridge", 1, "appliance"],
       ["Mattress", 1, null],
     ]);
-    expect(e.lines[0].weightLbs).toBe(240);
+    expect(e.lines[0]).toMatchObject({ weightLbs: 240, category: "boxes" });
   });
 
   it("keeps only real add-ons", () => {

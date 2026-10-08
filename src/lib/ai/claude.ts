@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import type { LearnedModel } from "@/lib/learning/learn";
+import { isCategoryId } from "@/lib/pricing/categories";
 import type { JobEstimate } from "@/lib/pricing/types";
 import { PHOTO_ANALYSIS_SYSTEM, RATE_CARD_SYSTEM, photoAnalysisInstructions } from "./prompts";
 import {
@@ -86,10 +88,10 @@ function toAnalysisError(err: unknown): AnalysisError {
   return new AnalysisError("Something went wrong talking to the AI. Try again.");
 }
 
-export async function analyzePhotos(req: AnalyzeRequest): Promise<JobEstimate> {
+export async function analyzePhotos(req: AnalyzeRequest, learned?: LearnedModel): Promise<JobEstimate> {
   const analysis = await ask<PhotoAnalysis>(
     PHOTO_ANALYSIS_SYSTEM,
-    [...photoBlocks(req.photos), { type: "text", text: photoAnalysisInstructions(req) }],
+    [...photoBlocks(req.photos), { type: "text", text: photoAnalysisInstructions(req, learned) }],
     betaZodOutputFormat(PhotoAnalysisSchema),
   );
   return toEstimate(analysis, req.itemFees);
@@ -121,6 +123,7 @@ export function toEstimate(a: PhotoAnalysis, itemFees: AnalyzeRequest["itemFees"
         cubicYards: pos(l.cubic_yards_total),
         weightLbs: Math.round(pos(l.weight_lbs_total)),
         material: l.material,
+        category: isCategoryId(l.category) ? l.category : "other",
         itemId: special.has(l.flat_rate_item_id) ? l.flat_rate_item_id : null,
       })),
     addOns: a.add_ons
@@ -132,5 +135,6 @@ export function toEstimate(a: PhotoAnalysis, itemFees: AnalyzeRequest["itemFees"
     accessNotes: a.access_notes,
     confidence: a.confidence,
     questionsForCustomer: a.questions_for_customer.slice(0, 3),
+    networkCalibrationPct: 0,
   };
 }

@@ -166,7 +166,12 @@ export const DEFAULT_SETTINGS: Settings = {
     spreadPct: { high: 5, medium: 10, low: 20 },
     unseenPct: 10,
     unseenHighRiskPct: 20,
-    calibrationPct: 0,
+    calibrationPct: null,
+  },
+
+  learning: {
+    shareData: true,
+    useNetwork: true,
   },
 
   charges: {

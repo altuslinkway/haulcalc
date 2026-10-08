@@ -11,7 +11,7 @@ const tiers = DEFAULT_SETTINGS.loadTiers;
 function exact(): Settings {
   const s = structuredClone(DEFAULT_SETTINGS);
   s.trailer = { ...s.trailer, lengthFt: 15, widthFt: 6.75, sideHeightFt: 4 }; // 15 yd³
-  s.estimate = { spreadPct: { high: 0, medium: 0, low: 0 }, unseenPct: 0, unseenHighRiskPct: 0, calibrationPct: 0 };
+  s.estimate = { spreadPct: { high: 0, medium: 0, low: 0 }, unseenPct: 0, unseenHighRiskPct: 0, calibrationPct: null };
   return s;
 }
 
@@ -24,6 +24,7 @@ function line(overrides: Partial<EstimateLine> = {}): EstimateLine {
     cubicYards: 7.5,
     weightLbs: 1500,
     material: "household",
+    category: "mixed_pile",
     itemId: null,
     ...overrides,
   };
@@ -40,6 +41,7 @@ function estimate(overrides: Partial<JobEstimate> = {}): JobEstimate {
     accessNotes: "",
     confidence: "high",
     questionsForCustomer: [],
+    networkCalibrationPct: 0,
     ...overrides,
   };
 }
@@ -120,6 +122,21 @@ describe("computeQuote: what's priced", () => {
     s.estimate.calibrationPct = 20;
     // 7.5 → 9 yd³ = 60% → 430 + 0.4 × 165.
     expect(computeQuote(s, estimate(), details).total.low).toBe(495);
+  });
+
+  it("applies the network correction unless the owner set their own or opted out", () => {
+    const e = estimate({ networkCalibrationPct: 20 });
+    const q = computeQuote(exact(), e, details);
+    expect(q.volume.calibrationSource).toBe("network");
+    expect(q.total.low).toBe(495);
+
+    const own = exact();
+    own.estimate.calibrationPct = 0;
+    expect(computeQuote(own, e, details)).toMatchObject({ total: { low: 430 }, volume: { calibrationSource: "owner" } });
+
+    const optedOut = exact();
+    optedOut.learning.useNetwork = false;
+    expect(computeQuote(optedOut, e, details).volume.calibrationSource).toBeNull();
   });
 
   it("prices flat-rate items on their own, without charging for their space", () => {

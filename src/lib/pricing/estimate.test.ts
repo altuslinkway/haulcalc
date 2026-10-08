@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS } from "./defaults";
 import {
   addLine,
   customLine,
+  lineForCategory,
   lineForItem,
   loadCubicYards,
   scaleLoadTo,
@@ -15,9 +16,9 @@ import type { JobEstimate } from "./types";
 const base: JobEstimate = {
   summary: "",
   lines: [
-    { id: "boxes", description: "Boxes", quantity: 10, cubicYards: 1, weightLbs: 200, material: "household", itemId: null },
-    { id: "sofa", description: "Sofa", quantity: 1, cubicYards: 2, weightLbs: 150, material: "household", itemId: null },
-    { id: "fridge", description: "Fridge", quantity: 1, cubicYards: 1.5, weightLbs: 250, material: "household", itemId: "appliance" },
+    { id: "boxes", description: "Boxes", quantity: 10, cubicYards: 1, weightLbs: 200, material: "household", category: "boxes", itemId: null },
+    { id: "sofa", description: "Sofa", quantity: 1, cubicYards: 2, weightLbs: 150, material: "household", category: "sofa", itemId: null },
+    { id: "fridge", description: "Fridge", quantity: 1, cubicYards: 1.5, weightLbs: 250, material: "household", category: "refrigerator", itemId: "appliance" },
   ],
   addOns: [],
   scope: "single_area",
@@ -26,6 +27,7 @@ const base: JobEstimate = {
   accessNotes: "",
   confidence: "high",
   questionsForCustomer: [],
+  networkCalibrationPct: 0,
 };
 
 describe("estimate edits", () => {
@@ -64,6 +66,12 @@ describe("estimate edits", () => {
     const dirt = customLine("Dirt", 2, "dense");
     expect(dirt).toMatchObject({ itemId: null, weightLbs: 4000 });
     expect(addLine(base, dirt).lines).toHaveLength(4);
+  });
+
+  it("sizes a new line from its item type", () => {
+    expect(lineForCategory("sectional")).toMatchObject({ category: "sectional", cubicYards: 3.5, weightLbs: 250 });
+    expect(lineForCategory("sectional", 4.2).cubicYards).toBe(4.2);
+    expect(lineForCategory("dense", 2)).toMatchObject({ material: "dense", weightLbs: 4000 });
   });
 
   it("sets and clears add-on counts", () => {

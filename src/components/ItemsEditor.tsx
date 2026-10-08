@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { specialItem } from "@/lib/pricing/engine";
+import { ITEM_CATEGORIES, type ItemCategoryId } from "@/lib/pricing/categories";
 import {
   addLine,
   addOnQuantity,
   customLine,
+  lineForCategory,
   lineForItem,
   removeLine,
   setAddOn,
@@ -22,6 +24,16 @@ const MATERIAL_OPTIONS: { value: Material; label: string }[] = [
   { value: "yard", label: "Yard waste" },
   { value: "dense", label: "Concrete, dirt, brick" },
 ];
+
+const CATEGORY_OPTIONS = ITEM_CATEGORIES.map((c) => ({ value: c.id as ItemCategoryId, label: c.label }));
+
+/** The item type for a hand-added pile, by what it's made of. */
+const PILE_TYPE: Record<Material, ItemCategoryId> = {
+  household: "mixed_pile",
+  construction: "construction",
+  yard: "yard_waste",
+  dense: "dense",
+};
 
 const priceText = (f: ItemFee) => (f.priceLow === f.priceHigh ? money(f.priceLow) : `${money(f.priceLow)}–${money(f.priceHigh)}`);
 const yd = (n: number) => `${Math.round(n * 10) / 10} yd³`;
@@ -159,6 +171,13 @@ function LineRow({
             value={line.description}
             onChange={(description) => onChange(updateLine(estimate, line.id, { description }))}
           />
+          <Select<ItemCategoryId>
+            label="Item type"
+            value={line.category}
+            options={CATEGORY_OPTIONS}
+            onChange={(category) => onChange(updateLine(estimate, line.id, { category }))}
+            hint="Helps the app learn typical sizes"
+          />
           <div className="flex items-center justify-between gap-3">
             <span className="text-sm font-medium text-stone-700">How many</span>
             <Stepper
@@ -235,7 +254,7 @@ function AddItem({ settings, onAdd }: { settings: Settings; onAdd: (line: Estima
             className={buttonClass.primary}
             disabled={!custom.description.trim() || custom.cubicYards <= 0}
             onClick={() => {
-              onAdd(customLine(custom.description.trim(), custom.cubicYards, custom.material));
+              onAdd(customLine(custom.description.trim(), custom.cubicYards, custom.material, PILE_TYPE[custom.material]));
               setCustom(null);
             }}
           >
@@ -257,17 +276,29 @@ function AddItem({ settings, onAdd }: { settings: Settings; onAdd: (line: Estima
       onChange={(e) => {
         const v = e.target.value;
         if (v === "custom") setCustom({ description: "", cubicYards: 1, material: "household" });
-        const fee = special.find((f) => f.id === v);
+        const fee = special.find((f) => `fee:${f.id}` === v);
         if (fee) onAdd(lineForItem(fee));
+        if (v.startsWith("type:")) onAdd(lineForCategory(v.slice(5) as ItemCategoryId));
       }}
     >
       <option value="">+ Add an item the AI missed…</option>
-      <option value="custom">Something else (priced by the load)</option>
-      {special.map((f) => (
-        <option key={f.id} value={f.id}>
-          {f.pricing === "flat" ? `${f.name} — ${priceText(f)} flat` : `${f.name} — quote on site`}
-        </option>
-      ))}
+      {special.length > 0 && (
+        <optgroup label="Your flat-rate and on-site items">
+          {special.map((f) => (
+            <option key={f.id} value={`fee:${f.id}`}>
+              {f.pricing === "flat" ? `${f.name} — ${priceText(f)} flat` : `${f.name} — quote on site`}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      <optgroup label="By the load">
+        {ITEM_CATEGORIES.filter((c) => c.unit === "each").map((c) => (
+          <option key={c.id} value={`type:${c.id}`}>
+            {c.label}
+          </option>
+        ))}
+        <option value="custom">Something else / a pile…</option>
+      </optgroup>
     </select>
   );
 }

@@ -10,7 +10,7 @@ import { formatFraction, parseFraction } from "@/lib/format";
 import { DEFAULT_SETTINGS, trailerCubicYards } from "@/lib/pricing/defaults";
 import { applyRateCard, slugify } from "@/lib/pricing/rateCard";
 import type { DensePolicy, ItemPricing, Settings } from "@/lib/pricing/types";
-import { buttonClass, Card, money, NumberField, Segmented, Select, TextField } from "./ui";
+import { buttonClass, Card, money, NumberField, Segmented, Select, TextField, Toggle } from "./ui";
 
 type Update = (fn: (draft: Settings) => void) => void;
 
@@ -178,16 +178,47 @@ export function SettingsForm() {
             />
           ))}
         </div>
-        <div className="mt-3">
-          <NumberField
-            label="Correction from past jobs"
-            suffix="%"
-            value={settings.estimate.calibrationPct}
-            parse={parseSigned}
-            inputMode="text"
-            onChange={(v) => update((s) => void (s.estimate.calibrationPct = v))}
-            hint="Set it from Jobs once you've logged how big jobs really were. +10 means the AI tends to guess 10% small."
+      </Card>
+
+      <Card title="Getting smarter" subtitle="Every corrected quote and rated job makes estimates better, for you and every owner.">
+        <div className="divide-y divide-stone-100">
+          <Toggle
+            label="Share my corrections"
+            hint="Item types, sizes, weights and how jobs turned out. Never photos, names, addresses or prices."
+            checked={settings.learning.shareData}
+            onChange={(v) => update((s) => void (s.learning.shareData = v))}
           />
+          <Toggle
+            label="Use what all owners have learned"
+            hint="Better item sizes for the AI, and a correction for how far off similar jobs have run."
+            checked={settings.learning.useNetwork}
+            onChange={(v) => update((s) => void (s.learning.useNetwork = v))}
+          />
+        </div>
+        <div className="mt-3">
+          {settings.estimate.calibrationPct === null ? (
+            <p className="text-sm text-stone-600">
+              No correction of your own set.{" "}
+              <button type="button" className="font-semibold text-orange-700" onClick={() => update((s) => void (s.estimate.calibrationPct = 0))}>
+                Set my own
+              </button>
+            </p>
+          ) : (
+            <div className="space-y-1">
+              <NumberField
+                label="My own correction"
+                suffix="%"
+                value={settings.estimate.calibrationPct}
+                parse={parseSigned}
+                inputMode="text"
+                onChange={(v) => update((s) => void (s.estimate.calibrationPct = v))}
+                hint="Replaces the all-owners correction on your quotes. +10 means your jobs run 10% bigger than the AI guesses. Jobs suggests one from your rated jobs."
+              />
+              <button type="button" className="text-sm font-semibold text-orange-700" onClick={() => update((s) => void (s.estimate.calibrationPct = null))}>
+                Clear it
+              </button>
+            </div>
+          )}
         </div>
       </Card>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import type { JobRating } from "@/lib/learning/learn";
 import { createLocalStore } from "./localStore";
 
 /** A quote that was sent, and what the job turned out to be. */
@@ -12,24 +13,30 @@ export interface SavedJob {
   priceHigh: number;
   /** The single price sent, when the owner quoted one number. */
   sentPrice: number | null;
-  /** The AI's own load estimate (before edits, cushion or correction), for calibration. */
-  aiLoadCubicYards: number;
-  /** The load size the quote was priced on, after the owner's edits. */
-  quotedLoadCubicYards: number;
+  /** The AI's whole estimate (before edits, cushion or correction), for calibration. */
+  aiCubicYards: number;
+  /** The size the quote was priced on, after the owner's edits. */
+  quotedCubicYards: number;
   trailerCubicYards: number;
+  /** Correction already in the quote, so a later rating can be read against what was shown. */
+  calibrationPct: number;
+  /** Whether this job's corrections went to the shared learning store. */
+  shared: boolean;
   outcome: JobOutcome | null;
 }
 
 export interface JobOutcome {
-  actualLoadCubicYards: number | null;
+  won: boolean;
+  /** One-tap answer to "how did the job compare to the estimate?" */
+  rating: JobRating | null;
+  actualCubicYards: number | null;
   finalPrice: number | null;
   dumpWeightLbs: number | null;
-  won: boolean;
 }
 
 const MAX_JOBS = 200;
 
-const store = createLocalStore<SavedJob[]>("haulcalc.jobs.v1", [], (saved) => (Array.isArray(saved) ? saved : []));
+const store = createLocalStore<SavedJob[]>("haulcalc.jobs.v2", [], (saved) => (Array.isArray(saved) ? saved : []));
 
 export const useJobs = store.use;
 

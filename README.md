@@ -19,7 +19,23 @@ Quote junk removal jobs from customer photos in seconds. Built for independent h
    - crew time door to door, including the dump run, plus payroll taxes
    - truck cost per mile, disposal fees, card fees, overhead, and marketing when the job came from a paid lead
    - a **shared dump run** option that splits dump time across small jobs
-6. **Send it and learn.** Copy, share, or text the quote, and it's saved under **Jobs**. After the job, log the actual load size, final price, and dump-ticket weight. After 3 jobs, HaulCalc suggests a correction for the AI's estimates.
+6. **Send it.** Copy, share, or text the quote, and it's saved under **Jobs**.
+7. **It gets smarter with every job** (see below).
+
+## How estimates improve over time
+
+The AI model itself isn't retrained. What improves is what HaulCalc tells it and how HaulCalc corrects its numbers, using feedback from every owner:
+
+- **Corrections when quoting.** Every line the AI returns is tagged with an item type from a fixed list (`src/lib/pricing/categories.ts`). When an owner changes a size and sends the quote, the AI's guess and the owner's number are recorded side by side.
+- **One tap after the job.** On the Jobs page, each sent quote asks "How did the job compare to the estimate?" (much smaller … much bigger). Exact load size and dump-ticket weight are optional.
+- **Pooling across owners** (`src/lib/learning/`). Feedback goes to a shared Postgres table. It's aggregated as the median of each owner's median, so one careless or malicious account can't drag the numbers. Nothing is used until at least 3 different owners agree. Each owner's vote uses their latest jobs, so corrections keep up as the AI's guesses improve. Ratings are read against the quote the owner actually saw, so an applied correction doesn't undo itself.
+- **Feeding it back:**
+  - Learned item sizes (e.g. "sectional: about 4.2 yd³ each, confirmed by 9 owners") are added to the AI's instructions on every quote.
+  - A whole-job correction for each kind of job (single items, one room, multi-room cleanouts) adjusts the price range. Quotes show it ("+8% learned from all owners' past jobs").
+- **Each owner's own correction.** Jobs also shows how an owner's own jobs compare. They can apply their own correction instead of the shared one.
+- **Privacy.** Only item types, sizes, weights and ratings are shared. Never photos, descriptions, names, addresses or prices. Owners can switch sharing off, or stop using shared learning, under My rates → Getting smarter.
+
+To turn shared learning on, set `DATABASE_URL` to any Postgres database (on Vercel: Storage → create a Postgres/Neon database, and it sets the variable for you). The table is created automatically. Without it, everything still works and learning stays on each device.
 
 Defaults come from market research on US independents. See [`reports/Junk removal cost drivers.md`](reports/Junk%20removal%20cost%20drivers.md), with the underlying notes in `research_notes/`. Everything is editable under **My rates**: owners can type their numbers, reorder items, change how each item is charged, or **upload a photo of their rate card** to fill it in.
 
@@ -36,7 +52,7 @@ No API key yet? `npm run demo` runs the full app with sample AI answers.
 On a phone, open the site and use "Add to Home Screen". It runs like an app.
 
 ```bash
-npm test          # pricing engine, estimate edits, calibration, AI mapping, rate card import
+npm test          # pricing engine, estimate edits, learning (incl. real Postgres via PGlite), AI mapping, rate card import
 npm run typecheck
 npm run lint
 ```
@@ -47,17 +63,20 @@ npm run lint
 | --- | --- |
 | `src/lib/pricing/` | Data model, default rates, pricing engine, estimate edits, quote and photo-request messages, rate-card import, calibration. No AI and no UI, fully unit-tested. |
 | `src/lib/ai/` | Claude prompts, structured-output schemas, API calls, demo data. |
-| `src/lib/client/` | Browser storage for settings and jobs, photo resizing. |
+| `src/lib/learning/` | Shared learning: feedback store (Postgres or a local file), aggregation across owners. |
+| `src/lib/client/` | Browser storage for settings and jobs, photo resizing, sending feedback. |
 | `src/app/api/analyze` | Photos → itemized job estimate. |
 | `src/app/api/rate-card` | Rate card photos → rates for the owner to review. |
+| `src/app/api/feedback`, `src/app/api/learning` | Owners' corrections in; what's been learned out. |
 | `src/components/` | Quote screen and item editor, Jobs, My rates, shared UI. |
 
 The AI model defaults to Claude Opus 5.5 at medium effort (`HAULCALC_MODEL`, `HAULCALC_EFFORT` to change). Requests opt into Anthropic's server-side fallback, so a rare safety decline retries on another model instead of failing.
 
 ## Current limits / next steps
 
-- **Settings and jobs are stored in the browser** (one owner, one device). Accounts and a database come next, so rates and job history sync across phones and crew.
-- **No login yet.** Anyone with the site's link can run photo analyses on your API key, so keep the link private.
+- **Settings and jobs are stored in the browser** (one owner, one device). Accounts come next, so rates and job history sync across phones and crew.
+- **No login yet.** Anyone with the site's link can run photo analyses on your API key and send feedback. The one-vote-per-device math limits how much a bad actor can skew learning, but accounts are the real fix before opening it up widely.
+- **Photos aren't kept**, so learning works from numbers only. Storing photos (with owner consent) would allow showing the AI similar past jobs as examples, and an accuracy test set for every prompt change.
 - **Customer upload link.** Let customers upload photos directly from a link the owner texts them, instead of forwarding pictures.
 - **Unmeasured defaults:** dump-run time, loading time per ton of heavy material, and hours to load a full trailer are placeholders until owners' logged jobs calibrate them.
 - Deploying to Vercel works out of the box. Photos are shrunk on the phone before upload to stay under request size limits.

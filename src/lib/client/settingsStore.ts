@@ -5,14 +5,21 @@ import type { Settings } from "@/lib/pricing/types";
 import { createLocalStore } from "./localStore";
 
 /** Fill in fields added since the settings were saved. */
-function withDefaults(saved: unknown): Settings {
+export function withDefaults(saved: unknown): Settings {
   const s = (saved ?? {}) as Partial<Settings>;
   const d = DEFAULT_SETTINGS;
   return {
     ...d,
     ...s,
     trailer: { ...d.trailer, ...s.trailer },
-    estimate: { ...d.estimate, ...s.estimate, spreadPct: { ...d.estimate.spreadPct, ...s.estimate?.spreadPct } },
+    estimate: {
+      ...d.estimate,
+      ...s.estimate,
+      spreadPct: { ...d.estimate.spreadPct, ...s.estimate?.spreadPct },
+      // Settings saved before shared learning used 0 for "no correction"; now that's null.
+      calibrationPct: s.learning ? (s.estimate?.calibrationPct ?? null) : s.estimate?.calibrationPct || null,
+    },
+    learning: { ...d.learning, ...s.learning },
     charges: { ...d.charges, ...s.charges },
     costs: {
       ...d.costs,

@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { CATEGORY_IDS } from "@/lib/pricing/categories";
 import { MAX_PHOTOS, MAX_RATE_CARD_PHOTOS } from "./limits";
 
 // Shapes Claude must answer in (structured outputs). Snake_case because
@@ -18,6 +19,7 @@ export const PhotoAnalysisSchema = z.object({
         cubic_yards_total: z.number().describe("Trailer space for the whole line, as loaded."),
         weight_lbs_total: z.number().describe("Weight of the whole line."),
         material: MaterialSchema,
+        category: z.enum(CATEGORY_IDS).describe("The item type from the reference guide that best fits this line."),
         flat_rate_item_id: z
           .string()
           .describe("Id from the owner's flat-rate or on-site list when this line is one of those items, otherwise an empty string."),
@@ -92,3 +94,40 @@ export type AnalyzeRequest = z.infer<typeof AnalyzeRequestSchema>;
 export const RateCardRequestSchema = z.object({
   photos: z.array(PhotoSchema).min(1).max(MAX_RATE_CARD_PHOTOS),
 });
+
+// ---- Feedback the app sends so estimates improve for everyone ----
+
+const FeedbackLineSchema = z.object({
+  id: z.string().max(64),
+  category: z.enum(CATEGORY_IDS),
+  quantity: z.number().min(0).max(1000),
+  cubicYards: z.number().min(0).max(200),
+  weightLbs: z.number().min(0).max(100_000),
+});
+
+export const FeedbackRequestSchema = z.object({
+  id: z.string().min(8).max(64),
+  deviceId: z.string().min(8).max(64),
+  /** Sent with the quote. */
+  quote: z
+    .object({
+      scope: z.enum(["few_items", "single_area", "multi_area"]),
+      confidence: z.enum(["low", "medium", "high"]),
+      trailerCubicYards: z.number().min(1).max(100),
+      aiLines: z.array(FeedbackLineSchema).max(100),
+      sentLines: z.array(FeedbackLineSchema).max(100),
+      calibrationPct: z.number().min(-90).max(500),
+    })
+    .optional(),
+  /** Sent after the job. */
+  outcome: z
+    .object({
+      won: z.boolean(),
+      rating: z.enum(["much_smaller", "smaller", "about_right", "bigger", "much_bigger"]).nullable(),
+      actualCubicYards: z.number().min(0).max(200).nullable(),
+      dumpWeightLbs: z.number().min(0).max(100_000).nullable(),
+    })
+    .optional(),
+});
+
+export type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>;

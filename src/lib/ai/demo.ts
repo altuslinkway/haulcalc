@@ -8,12 +8,12 @@ export const DEMO_ESTIMATE: JobEstimate = {
   summary:
     "Garage cleanout: a worn sectional, a queen mattress and box spring, an old fridge, about a dozen boxes and bags, plus a couple of paint cans on the shelf.",
   lines: [
-    { id: "demo-1", description: "Sectional sofa", quantity: 1, cubicYards: 3.5, weightLbs: 250, material: "household", itemId: null },
-    { id: "demo-2", description: "Queen mattress and box spring", quantity: 2, cubicYards: 1.5, weightLbs: 150, material: "household", itemId: null },
-    { id: "demo-3", description: "Refrigerator", quantity: 1, cubicYards: 1.75, weightLbs: 250, material: "household", itemId: "appliance" },
-    { id: "demo-4", description: "Moving boxes and contractor bags", quantity: 14, cubicYards: 1.75, weightLbs: 350, material: "household", itemId: null },
-    { id: "demo-5", description: "Loose garage clutter (bikes, shelving)", quantity: 1, cubicYards: 1.5, weightLbs: 250, material: "household", itemId: null },
-    { id: "demo-6", description: "Lumber scraps by the back wall", quantity: 1, cubicYards: 0.5, weightLbs: 150, material: "construction", itemId: null },
+    { id: "demo-1", description: "Sectional sofa", quantity: 1, cubicYards: 3.5, weightLbs: 250, material: "household", category: "sectional", itemId: null },
+    { id: "demo-2", description: "Queen mattress and box spring", quantity: 2, cubicYards: 1.5, weightLbs: 150, material: "household", category: "mattress", itemId: null },
+    { id: "demo-3", description: "Refrigerator", quantity: 1, cubicYards: 1.75, weightLbs: 250, material: "household", category: "refrigerator", itemId: "appliance" },
+    { id: "demo-4", description: "Moving boxes and contractor bags", quantity: 14, cubicYards: 1.75, weightLbs: 350, material: "household", category: "boxes", itemId: null },
+    { id: "demo-5", description: "Loose garage clutter (bikes, shelving)", quantity: 1, cubicYards: 1.5, weightLbs: 250, material: "household", category: "mixed_pile", itemId: null },
+    { id: "demo-6", description: "Lumber scraps by the back wall", quantity: 1, cubicYards: 0.5, weightLbs: 150, material: "construction", category: "construction", itemId: null },
   ],
   addOns: [
     { itemId: "mattress", quantity: 2 },
@@ -25,6 +25,7 @@ export const DEMO_ESTIMATE: JobEstimate = {
   accessNotes: "Everything is in an open garage with driveway access.",
   confidence: "medium",
   questionsForCustomer: ["Is there anything on the back wall of the garage that's out of the photo?"],
+  networkCalibrationPct: 0,
 };
 
 export const DEMO_RATE_CARD: RateCard = {

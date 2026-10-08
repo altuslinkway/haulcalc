@@ -1,5 +1,7 @@
 // Core data model shared by the pricing engine, the AI layer, and the UI.
 
+import type { ItemCategoryId } from "./categories";
+
 /** One row of a rate card's load pricing, e.g. "1/2 load: $255–$430". */
 export interface LoadTier {
   id: string;
@@ -71,8 +73,19 @@ export interface Settings {
     unseenPct: number;
     /** Used instead for multi-room jobs, cleanouts and low-confidence estimates. */
     unseenHighRiskPct: number;
-    /** Correction learned from finished jobs: + means the AI tends to estimate low. */
-    calibrationPct: number;
+    /**
+     * Your own correction from your finished jobs: +10 means the AI tends to
+     * guess 10% small. Null means use what HaulCalc learned across all owners.
+     */
+    calibrationPct: number | null;
+  };
+
+  /** Pooling anonymous corrections across owners so estimates improve for everyone. */
+  learning: {
+    /** Send item sizes, corrections and job outcomes (no photos, names, addresses or prices). */
+    shareData: boolean;
+    /** Apply what's been learned from all owners' jobs. */
+    useNetwork: boolean;
   };
 
   /** Charges added to the customer's price. */
@@ -135,6 +148,8 @@ export interface EstimateLine {
   cubicYards: number;
   weightLbs: number;
   material: Material;
+  /** What kind of item this is, so corrections can be pooled across jobs. */
+  category: ItemCategoryId;
   /** Set when the line is priced as a flat-rate or on-site item instead of by the load. */
   itemId: string | null;
 }
@@ -151,6 +166,8 @@ export interface JobEstimate {
   accessNotes: string;
   confidence: Confidence;
   questionsForCustomer: string[];
+  /** How far off similar jobs have been across all owners: +8 means they ran 8% bigger. */
+  networkCalibrationPct: number;
 }
 
 /** Details the owner knows that photos can't show. */
@@ -197,6 +214,9 @@ export interface Quote {
     /** Trips the weight alone would need, when that's more than the space needs. */
     weightLimited: boolean;
     unseenPct: number;
+    /** Correction applied for how far off past estimates ran, and whose. */
+    calibrationPct: number;
+    calibrationSource: "owner" | "network" | null;
   };
   lines: QuoteLine[];
   subtotal: Range;

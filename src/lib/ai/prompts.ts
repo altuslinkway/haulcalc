@@ -1,7 +1,21 @@
+import type { LearnedModel } from "@/lib/learning/learn";
+import { categoryById, ITEM_CATEGORIES } from "@/lib/pricing/categories";
 import type { AnalyzeRequest } from "./schemas";
 
 // The system prompts are fixed text so they cache across requests; everything
-// owner- or job-specific goes in the user message.
+// owner- or job-specific (including what's been learned from past jobs) goes
+// in the user message.
+
+const range = ([lo, hi]: readonly [number, number]) => (lo === hi ? `${lo}` : `${lo}–${hi}`);
+
+/** The reference guide, one line per item type, from the same table owners' corrections update. */
+const REFERENCE_GUIDE = ITEM_CATEGORIES.filter((c) => c.id !== "other")
+  .map((c) =>
+    c.unit === "each"
+      ? `- ${c.id}: ${c.label}, ${range(c.cubicYards)} yd³ each, ~${c.lbs} lbs`
+      : `- ${c.id}: ${c.label}, by volume, ~${c.lbs} lbs per yd³`,
+  )
+  .join("\n");
 
 export const PHOTO_ANALYSIS_SYSTEM = `You are an experienced junk removal estimator. A junk removal owner forwards you the photos a customer sent and you size up the job so their pricing software can quote it. You never set prices; you estimate what's there, how much trailer space it takes, and how heavy it is.
 
@@ -11,15 +25,8 @@ How to estimate:
 - If something is clearly there but partly hidden (behind other items, inside a closet, cut off by the frame), include your best guess for it as its own line and say so in the description.
 - Loose piles compress about 10–25% when loaded. For a pile, estimate length × width × height in feet and divide by 27.
 
-Reference volumes (cubic yards, as loaded):
-- Full-size pickup bed, level full: 2–3
-- Sofa 2–2.5 · loveseat 1.5 · sectional 3–4 · recliner or armchair 1
-- Mattress or box spring (any size): 0.5–1 each
-- Dresser 1–1.5 · dining table 1–1.5 · dining chair 0.25 · office desk 1–1.5
-- Refrigerator 1.5–2 · washer or dryer 1 · stove 1 · dishwasher 0.5
-- Flat TV 0.25 · tube TV 0.5
-- Contractor trash bag 0.15 · kitchen trash bag 0.07 · medium moving box 0.1
-- Upright piano 2 · treadmill 1.5 · hot tub 6–8
+Item types and reference sizes (cubic yards as loaded, typical weight). Tag every line with the best-fitting type id; use "other" only when nothing fits. A full-size pickup bed holds 2–3 yd³ level full.
+${REFERENCE_GUIDE}
 
 Reference weights (pounds per cubic yard):
 - Furniture: 100–200 · mixed household junk, bags, boxes: 150–250
@@ -40,7 +47,31 @@ Stairs and access: report flights of stairs only when the photos make it clear i
 
 Questions for the customer: at most three, and only ones whose answer would change the price, such as whether there's more out of frame or what's inside sealed boxes. Leave the list empty when the photos are clear.`;
 
-export function photoAnalysisInstructions(req: AnalyzeRequest): string {
+/**
+ * What owners have taught the app: item types whose sizes they consistently
+ * corrected. Only items with a real correction or a learned size are listed.
+ */
+export function learnedGuidance(model: LearnedModel | undefined): string {
+  const lines = (model?.items ?? [])
+    .filter((i) => i.perUnitCubicYards !== null || Math.abs(i.biasPct) >= 5)
+    .map((i) => {
+      const c = categoryById(i.category);
+      const who = `${i.owners} owners`;
+      if (c.unit === "each" && i.perUnitCubicYards !== null) {
+        return `- ${c.id}: about ${i.perUnitCubicYards} yd³ each (confirmed by ${who})`;
+      }
+      return `- ${c.id}: has run about ${Math.abs(i.biasPct)}% ${i.biasPct > 0 ? "bigger" : "smaller"} than estimated from photos (${who})`;
+    });
+  if (lines.length === 0) return "";
+  return `<learned_from_past_jobs>
+Owners using this app have checked and corrected past estimates. Where these differ from the reference guide, trust these:
+${lines.join("\n")}
+</learned_from_past_jobs>
+
+`;
+}
+
+export function photoAnalysisInstructions(req: AnalyzeRequest, learned?: LearnedModel): string {
   const list = (kind: "flat" | "addon" | "onsite") => {
     const fees = req.itemFees.filter((f) => f.pricing === kind);
     return fees.length ? fees.map((f) => `- ${f.id}: ${f.name}${f.hint ? ` — ${f.hint}` : ""}`).join("\n") : "(none)";
@@ -48,7 +79,7 @@ export function photoAnalysisInstructions(req: AnalyzeRequest): string {
   const prohibited = req.prohibitedItems.length ? req.prohibitedItems.map((p) => `- ${p}`).join("\n") : "(none)";
   const notes = req.customerNotes.trim() || "(none)";
 
-  return `The owner hauls with a ${req.trailer.name} that holds ${req.trailer.cubicYards} cubic yards.
+  return `${learnedGuidance(learned)}The owner hauls with a ${req.trailer.name} that holds ${req.trailer.cubicYards} cubic yards.
 
 <flat_rate_items>
 ${list("flat")}

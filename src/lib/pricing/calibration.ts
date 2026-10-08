@@ -1,17 +1,24 @@
-// Learning from finished jobs: how far off were the photo estimates?
+import { RATING_RATIO, type JobRating } from "@/lib/learning/learn";
+
+// Learning from one owner's own finished jobs: how far off were the photo
+// estimates? (Pooling across all owners happens on the server, in learning/.)
 
 export interface JobResult {
-  aiLoadCubicYards: number;
-  actualLoadCubicYards: number | null;
+  aiCubicYards: number;
+  /** What the quote was based on, after edits, and the correction it already carried. */
+  quotedCubicYards: number;
+  calibrationPct: number;
+  actualCubicYards: number | null;
+  rating: JobRating | null;
   dumpWeightLbs: number | null;
 }
 
 export interface Calibration {
-  /** Jobs with both an AI estimate and an actual load size. */
+  /** Jobs with an AI estimate and either an actual size or a rating. */
   jobs: number;
-  /** Suggested correction: +15 means actual loads ran 15% bigger than the AI said. */
+  /** Suggested correction: +15 means jobs ran 15% bigger than the AI said. */
   suggestedPct: number | null;
-  /** Average weight per cubic yard from dump tickets, when recorded. */
+  /** Typical weight per cubic yard from dump tickets, when recorded. */
   lbsPerCubicYard: number | null;
   weighedJobs: number;
 }
@@ -25,17 +32,30 @@ const median = (xs: number[]) => {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 };
 
-export function calibrate(results: JobResult[]): Calibration {
-  const sized = results.filter((r) => r.aiLoadCubicYards > 0 && (r.actualLoadCubicYards ?? 0) > 0);
-  // Median, so one odd job (a garage that turned out to be two) doesn't swing it.
-  const ratio = sized.length ? median(sized.map((r) => r.actualLoadCubicYards! / r.aiLoadCubicYards)) : null;
+/**
+ * Actual ÷ the AI's estimate for one job. An exact size compares directly; a
+ * rating is relative to the quote the owner saw (their edits and any
+ * correction included), so it's converted back to the AI's terms.
+ */
+export function jobRatio(r: JobResult): number | null {
+  if (r.aiCubicYards <= 0) return null;
+  if ((r.actualCubicYards ?? 0) > 0) return r.actualCubicYards! / r.aiCubicYards;
+  if (!r.rating) return null;
+  const shown = r.quotedCubicYards * (1 + r.calibrationPct / 100);
+  return (shown * RATING_RATIO[r.rating]) / r.aiCubicYards;
+}
 
-  const weighed = results.filter((r) => (r.actualLoadCubicYards ?? 0) > 0 && (r.dumpWeightLbs ?? 0) > 0);
-  const density = weighed.length ? median(weighed.map((r) => r.dumpWeightLbs! / r.actualLoadCubicYards!)) : null;
+export function calibrate(results: JobResult[]): Calibration {
+  // Median, so one odd job (a garage that turned out to be two) doesn't swing it.
+  const ratios = results.map(jobRatio).filter((r): r is number => r !== null);
+  const ratio = ratios.length ? median(ratios) : null;
+
+  const weighed = results.filter((r) => (r.actualCubicYards ?? 0) > 0 && (r.dumpWeightLbs ?? 0) > 0);
+  const density = weighed.length ? median(weighed.map((r) => r.dumpWeightLbs! / r.actualCubicYards!)) : null;
 
   return {
-    jobs: sized.length,
-    suggestedPct: ratio !== null && sized.length >= MIN_JOBS_FOR_CALIBRATION ? Math.round((ratio - 1) * 100) : null,
+    jobs: ratios.length,
+    suggestedPct: ratio !== null && ratios.length >= MIN_JOBS_FOR_CALIBRATION ? Math.round((ratio - 1) * 100) : null,
     lbsPerCubicYard: density !== null ? Math.round(density) : null,
     weighedJobs: weighed.length,
   };

@@ -3,12 +3,13 @@
 import { useMemo, useRef, useState } from "react";
 import { MAX_PHOTOS } from "@/lib/ai/limits";
 import { postJson } from "@/lib/client/api";
+import { sendFeedback, toFeedbackLines } from "@/lib/client/feedback";
 import { saveJob } from "@/lib/client/jobsStore";
 import { preparePhoto, type Photo } from "@/lib/client/photos";
 import { useSettings } from "@/lib/client/settingsStore";
 import { DEFAULT_DETAILS, trailerCubicYards } from "@/lib/pricing/defaults";
 import { computeQuote, rangeFactors, sortedTiers, unseenPctFor } from "@/lib/pricing/engine";
-import { loadCubicYards, scaleLoadTo } from "@/lib/pricing/estimate";
+import { scaleLoadTo } from "@/lib/pricing/estimate";
 import { buildPhotoRequestMessage, buildQuoteMessage, type QuoteStyle } from "@/lib/pricing/message";
 import type { JobDetails, JobEstimate, Quote, Settings } from "@/lib/pricing/types";
 import { ItemsEditor } from "./ItemsEditor";
@@ -97,8 +98,11 @@ export function QuoteFlow() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  /** Save the sent quote to Jobs and, if the owner shares data, send the AI's guess next to their corrections. */
   function recordSent(sentPrice: number | null) {
     if (!estimate || !quote || !aiEstimate) return;
+    const totalCy = (e: JobEstimate) => e.lines.reduce((s, l) => s + l.cubicYards, 0);
+    const shared = settings.learning.shareData;
     saveJob({
       id: quoteId,
       createdAt: new Date().toISOString(),
@@ -107,11 +111,26 @@ export function QuoteFlow() {
       priceLow: quote.total.low,
       priceHigh: quote.total.high,
       sentPrice,
-      aiLoadCubicYards: loadCubicYards(aiEstimate, settings),
-      quotedLoadCubicYards: loadCubicYards(estimate, settings),
+      aiCubicYards: totalCy(aiEstimate),
+      quotedCubicYards: totalCy(estimate),
       trailerCubicYards: trailerCubicYards(settings.trailer),
+      calibrationPct: quote.volume.calibrationPct,
+      shared,
       outcome: null,
     });
+    if (shared) {
+      sendFeedback({
+        id: quoteId,
+        quote: {
+          scope: aiEstimate.scope,
+          confidence: aiEstimate.confidence,
+          trailerCubicYards: trailerCubicYards(settings.trailer),
+          aiLines: toFeedbackLines(aiEstimate.lines),
+          sentLines: toFeedbackLines(estimate.lines),
+          calibrationPct: quote.volume.calibrationPct,
+        },
+      });
+    }
   }
 
   return (
@@ -378,6 +397,10 @@ function PriceHero({
           Trailer space: {pct(quote.volume.totalCubicYards.low / capacity)}–{pct(quote.volume.totalCubicYards.high / capacity)}
           {quote.volume.loads > 1 && ` · ${quote.volume.loads} loads`}
           {quote.volume.unseenPct > 0 && ` · includes +${quote.volume.unseenPct}% for unseen items`}
+          {quote.volume.calibrationPct !== 0 &&
+            ` · ${quote.volume.calibrationPct > 0 ? "+" : ""}${quote.volume.calibrationPct}% learned from ${
+              quote.volume.calibrationSource === "owner" ? "your" : "all owners'"
+            } past jobs`}
         </p>
       </div>
     </section>

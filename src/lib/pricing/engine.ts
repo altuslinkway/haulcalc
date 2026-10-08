@@ -101,8 +101,20 @@ export function unseenPctFor(settings: Settings, estimate: JobEstimate, details:
 export function rangeFactors(settings: Settings, estimate: JobEstimate, details: JobDetails): Range {
   const unseenPct = unseenPctFor(settings, estimate, details);
   const spread = (settings.estimate.spreadPct[estimate.confidence] ?? 0) / 100;
-  const calibration = 1 + settings.estimate.calibrationPct / 100;
+  const calibration = 1 + calibrationFor(settings, estimate).pct / 100;
   return { low: calibration * (1 - spread), high: calibration * (1 + spread) * (1 + unseenPct / 100) };
+}
+
+/** The owner's own correction wins; otherwise what HaulCalc learned across owners, if they use it. */
+export function calibrationFor(
+  settings: Settings,
+  estimate: JobEstimate,
+): { pct: number; source: "owner" | "network" | null } {
+  if (settings.estimate.calibrationPct !== null) return { pct: settings.estimate.calibrationPct, source: "owner" };
+  if (settings.learning.useNetwork && estimate.networkCalibrationPct) {
+    return { pct: estimate.networkCalibrationPct, source: "network" };
+  }
+  return { pct: 0, source: null };
 }
 
 export function computeQuote(settings: Settings, estimate: JobEstimate, details: JobDetails): Quote {
@@ -130,6 +142,7 @@ export function computeQuote(settings: Settings, estimate: JobEstimate, details:
   // visible and leans up for what isn't. Low and high are two scenarios
   // carried through every line, price and cost alike.
   const unseenPct = unseenPctFor(settings, estimate, details);
+  const calibration = calibrationFor(settings, estimate);
   const factor = rangeFactors(settings, estimate, details);
 
   const loadCy = sum(loadLines, (l) => l.cubicYards);
@@ -203,7 +216,13 @@ export function computeQuote(settings: Settings, estimate: JobEstimate, details:
     if (loadCy > 0) {
       lines.push({
         label: `Load: ${tierLabel(fraction, settings.loadTiers)}`,
-        detail: `${fmtYards(cubicYards)} of a ${round1(capacity)} yd trailer${unseenPct > 0 ? `, incl. +${unseenPct}% for unseen items` : ""}`,
+        detail: [
+          `${fmtYards(cubicYards)} of a ${round1(capacity)} yd trailer`,
+          unseenPct > 0 ? `incl. +${unseenPct}% for unseen items` : "",
+          calibration.pct ? `${signed(calibration.pct)}% learned from past jobs` : "",
+        ]
+          .filter(Boolean)
+          .join(", "),
         amount: range(round(loadPrice(fraction.low, settings.loadTiers)), round(loadPrice(fraction.high, settings.loadTiers))),
       });
     }
@@ -358,6 +377,8 @@ export function computeQuote(settings: Settings, estimate: JobEstimate, details:
       loads: trips.high,
       weightLimited,
       unseenPct,
+      calibrationPct: calibration.pct,
+      calibrationSource: calibration.source,
     },
     lines,
     subtotal,
@@ -387,6 +408,7 @@ function roundRange(r: Range): Range {
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
+const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
 function fmtYards(r: Range): string {
   return round1(r.low) === round1(r.high) ? `${round1(r.low)} yd³` : `${round1(r.low)}–${round1(r.high)} yd³`;

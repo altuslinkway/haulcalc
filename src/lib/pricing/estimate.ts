@@ -1,3 +1,4 @@
+import { categoryById, type ItemCategoryId } from "./categories";
 import { specialItem } from "./engine";
 import type { EstimateLine, ItemFee, JobEstimate, Material, Settings } from "./types";
 
@@ -49,11 +50,17 @@ export function lineForItem(fee: ItemFee): EstimateLine {
     cubicYards: fee.cubicYardsEach,
     weightLbs: fee.lbsEach,
     material: "household",
+    category: "other",
     itemId: fee.id,
   };
 }
 
-export function customLine(description: string, cubicYards: number, material: Material): EstimateLine {
+export function customLine(
+  description: string,
+  cubicYards: number,
+  material: Material,
+  category: ItemCategoryId = "other",
+): EstimateLine {
   return {
     id: newLineId(),
     description,
@@ -61,6 +68,23 @@ export function customLine(description: string, cubicYards: number, material: Ma
     cubicYards,
     weightLbs: Math.round(cubicYards * DEFAULT_DENSITY[material]),
     material,
+    category,
+    itemId: null,
+  };
+}
+
+/** A new line for a common item type, sized from the typical (or learned) size. */
+export function lineForCategory(id: ItemCategoryId, cubicYardsEach?: number): EstimateLine {
+  const c = categoryById(id);
+  const cubicYards = cubicYardsEach ?? (c.cubicYards[0] + c.cubicYards[1]) / 2;
+  return {
+    id: newLineId(),
+    description: c.label,
+    quantity: 1,
+    cubicYards,
+    weightLbs: Math.round(c.unit === "each" ? c.lbs : c.lbs * cubicYards),
+    material: c.material,
+    category: c.id as ItemCategoryId,
     itemId: null,
   };
 }
@@ -81,7 +105,7 @@ export function loadCubicYards(estimate: JobEstimate, settings: Settings): numbe
 export function scaleLoadTo(estimate: JobEstimate, settings: Settings, targetCubicYards: number): JobEstimate {
   const current = loadCubicYards(estimate, settings);
   if (current <= 0) {
-    return addLine(estimate, customLine("Mixed junk", targetCubicYards, "household"));
+    return addLine(estimate, customLine("Mixed junk", targetCubicYards, "household", "mixed_pile"));
   }
   const ratio = targetCubicYards / current;
   return {
