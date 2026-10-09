@@ -146,7 +146,7 @@ const faqs = [
 ];
 
 const primaryButton =
-  "inline-flex min-h-14 items-center gap-2.5 rounded-[14px] bg-accent px-6 text-[17px] font-extrabold text-stone-900 no-underline hover:brightness-95";
+  "inline-flex min-h-14 items-center gap-2.5 rounded-[14px] bg-accent px-6 text-[17px] font-extrabold text-white no-underline hover:brightness-110";
 
 export default function HomePage() {
   return (
@@ -211,35 +211,35 @@ export default function HomePage() {
                   <span>Quote for Dana</span>
                   <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-bold text-stone-900">Medium confidence</span>
                 </div>
-                <div className="text-[34px] font-bold tracking-tight tabular-nums">$655 – $775</div>
-                <div className="text-[13px] text-stone-400">3/4 load, middle of the range $715</div>
+                <div className="text-[34px] font-bold tracking-tight tabular-nums">$780 – $865</div>
+                <div className="text-[13px] text-stone-400">3/4 load, or quote one price: $825</div>
                 <div className="relative mt-2 h-2.5 overflow-hidden rounded-full bg-stone-700" aria-hidden="true">
-                  <div className="absolute inset-y-0 left-0 w-[85%] bg-accent/45" />
-                  <div className="absolute inset-y-0 left-0 w-[66%] bg-accent" />
+                  <div className="absolute inset-y-0 left-0 w-[94%] bg-accent/45" />
+                  <div className="absolute inset-y-0 left-0 w-[82%] bg-accent" />
                 </div>
-                <div className="text-xs text-stone-400">Trailer space 66–85%</div>
+                <div className="text-xs text-stone-400">Trailer 82% to 94% full</div>
               </div>
               <div className="rounded-[18px] border border-stone-200 bg-white px-3.5 py-1.5">
-                <div className="pt-2 pb-1 text-[11px] font-bold tracking-[0.08em] text-stone-500 uppercase">By the load</div>
-                {[
-                  ["Sectional sofa", "3.5 yd³"],
-                  ["2× Mattress set", "1.5 yd³"],
-                  ["14× Boxes and bags", "1.8 yd³"],
-                ].map(([item, size]) => (
-                  <div key={item} className="flex justify-between border-b border-stone-100 py-2 text-[15px] last:border-b-0">
-                    <span>{item}</span>
-                    <span className="text-stone-500 tabular-nums">{size}</span>
+                <div className="pt-2 pb-1 text-[11px] font-bold tracking-[0.08em] text-stone-500 uppercase">In the load</div>
+                {["Sectional sofa", "14× Boxes and bags", "Garage clutter"].map((item) => (
+                  <div key={item} className="border-b border-stone-100 py-2 text-[15px] last:border-b-0">
+                    {item}
                   </div>
                 ))}
                 <div className="border-t border-stone-100 pt-2.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-stone-500 uppercase">
-                  Flat rate
+                  Flat-rate items
                 </div>
-                <div className="flex justify-between py-2 text-[15px]">
-                  <span>Refrigerator</span>
-                  <span className="text-stone-500 tabular-nums">$120</span>
-                </div>
+                {[
+                  ["2× Mattress", "$120"],
+                  ["Refrigerator", "$170"],
+                ].map(([item, price]) => (
+                  <div key={item} className="flex justify-between border-b border-stone-100 py-2 text-[15px] last:border-b-0">
+                    <span>{item}</span>
+                    <span className="font-semibold tabular-nums">{price}</span>
+                  </div>
+                ))}
               </div>
-              <div className="flex min-h-[52px] items-center justify-center gap-2 rounded-[14px] bg-accent text-base font-extrabold text-stone-900">
+              <div className="flex min-h-[52px] items-center justify-center gap-2 rounded-[14px] bg-accent text-base font-extrabold text-white">
                 <Icon size={18}>
                   <path d="M4 12l16-8-6 16-3-7-7-1z" />
                 </Icon>
@@ -262,7 +262,7 @@ export default function HomePage() {
                 <span className="text-[15px] font-semibold text-stone-500 tabular-nums">{s.n}</span>
                 <div
                   className={`flex h-[52px] w-[52px] items-center justify-center rounded-[14px] ${
-                    s.accent ? "bg-accent text-stone-900" : "bg-stone-900 text-stone-100"
+                    s.accent ? "bg-accent text-white" : "bg-stone-900 text-stone-100"
                   }`}
                 >
                   <Icon>{s.icon}</Icon>
@@ -350,7 +350,7 @@ export default function HomePage() {
               <div className="max-w-[80%] self-start rounded-[20px_20px_20px_6px] bg-stone-700 px-4 py-3 text-[15px] leading-snug">
                 Hi! Can you take everything in the garage? Pics attached.
               </div>
-              <div className="flex max-w-[88%] flex-col gap-2.5 self-end rounded-[20px_20px_6px_20px] bg-accent px-4 py-3.5 text-[15px] leading-normal text-stone-900">
+              <div className="flex max-w-[88%] flex-col gap-2.5 self-end rounded-[20px_20px_6px_20px] bg-accent px-4 py-3.5 text-[15px] leading-normal text-white">
                 <span>Hi Dana! This is [your business]. Thanks for sending the photos.</span>
                 <span>
                   Based on what we can see (about a 3/4 load), your price is $780–$865, including labor, loading, hauling and
@@ -377,7 +377,7 @@ export default function HomePage() {
               <li key={title} className="flex gap-4">
                 <span
                   className={`flex h-8 w-8 flex-none items-center justify-center rounded-full text-sm font-bold tabular-nums ${
-                    i === 2 ? "bg-accent text-stone-900" : "bg-stone-900 text-stone-100"
+                    i === 2 ? "bg-accent text-white" : "bg-stone-900 text-stone-100"
                   }`}
                 >
                   {i + 1}
@@ -399,7 +399,7 @@ export default function HomePage() {
             <div className="flex justify-between gap-3">
               <div>
                 <div className="font-bold">Dana&apos;s garage cleanout</div>
-                <div className="text-sm text-stone-500">Quoted $655 – $775</div>
+                <div className="text-sm text-stone-500">Quoted $780 – $865</div>
               </div>
               <span className="text-[13px] font-bold text-accent-deep">Needs feedback</span>
             </div>
@@ -429,7 +429,7 @@ export default function HomePage() {
             ].map(([label, value, hot]) => (
               <div key={label as string} className="flex justify-between gap-3 border-t border-stone-700 py-2.5 text-[15px]">
                 <span>{label}</span>
-                <span className={`tabular-nums ${hot ? "text-accent" : "text-stone-300"}`}>{value}</span>
+                <span className={`tabular-nums ${hot ? "text-accent-bright" : "text-stone-300"}`}>{value}</span>
               </div>
             ))}
           </div>
@@ -451,11 +451,11 @@ export default function HomePage() {
       </section>
 
       <section aria-labelledby="cta-title" className="bg-white px-6 pb-24">
-        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-8 rounded-[32px] bg-accent px-10 py-16 text-stone-900">
+        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-8 rounded-[32px] bg-accent px-10 py-16 text-white">
           <h2 id="cta-title" className="m-0 flex-[1_1_520px] font-display text-[clamp(32px,4vw,52px)] leading-none font-bold tracking-[-0.015em]">
             Get your next quote out before you&apos;re back in the truck.
           </h2>
-          <Link href="/quote" className="inline-flex min-h-[60px] items-center gap-2.5 rounded-2xl bg-stone-900 px-[30px] text-lg font-extrabold text-stone-100">
+          <Link href="/quote" className="inline-flex min-h-[60px] items-center gap-2.5 rounded-2xl bg-white px-[30px] text-lg font-extrabold text-stone-900">
             Try it free
             <Arrow />
           </Link>

@@ -43,7 +43,7 @@ export function Logo({ size = "md" }: { size?: "sm" | "md" }) {
   return (
     <span className="flex items-center gap-2.5">
       <span
-        className={`flex items-center justify-center rounded-[10px] bg-accent font-display font-extrabold text-stone-900 ${
+        className={`flex items-center justify-center rounded-[10px] bg-accent font-display font-extrabold text-white ${
           size === "sm" ? "h-8 w-8 text-[13px]" : "h-9 w-9 text-sm"
         }`}
       >
@@ -85,7 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 href={t.href}
                 aria-current={active ? "page" : undefined}
                 className={`relative flex min-h-[52px] flex-col items-center justify-center gap-1 text-xs ${
-                  active ? "font-extrabold text-accent" : "font-semibold text-stone-400"
+                  active ? "font-extrabold text-accent-bright" : "font-semibold text-stone-400"
                 }`}
               >
                 <svg
@@ -103,7 +103,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </svg>
                 {t.label}
                 {t.href === "/jobs" && waiting > 0 && (
-                  <span className="absolute top-1 left-[calc(50%+6px)] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-extrabold text-stone-900 ring-2 ring-stone-900">
+                  <span className="absolute top-1 left-[calc(50%+6px)] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-extrabold text-white ring-2 ring-stone-900">
                     <span className="sr-only">, booked: </span>
                     {waiting}
                   </span>

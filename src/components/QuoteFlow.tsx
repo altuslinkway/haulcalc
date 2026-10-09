@@ -607,7 +607,7 @@ function PhotoRequest({ settings, phone, onClose }: { settings: Settings; phone:
           </svg>
         </button>
       </div>
-      <p className="mt-3 ml-auto max-w-[94%] rounded-[22px_22px_6px_22px] bg-accent px-4 py-3 text-[15px] leading-snug whitespace-pre-wrap text-stone-900">
+      <p className="mt-3 ml-auto max-w-[94%] rounded-[22px_22px_6px_22px] bg-accent px-4 py-3 text-[15px] leading-snug whitespace-pre-wrap text-white">
         {message}
       </p>
       <Link href="/settings" className="mt-2 inline-flex min-h-11 items-center text-sm font-bold text-accent-deep">
@@ -709,7 +709,7 @@ function PriceHero({
               aria-pressed={picked === size.key}
               className={`min-h-12 rounded-xl text-[17px] font-extrabold ${
                 picked === size.key
-                  ? "border-2 border-accent bg-accent text-stone-900"
+                  ? "border-2 border-accent bg-accent text-white"
                   : "border border-stone-600 bg-stone-800 text-stone-100 active:bg-stone-700"
               }`}
               onClick={() => onChange(setLoadSize(estimate, settings, size.fraction))}

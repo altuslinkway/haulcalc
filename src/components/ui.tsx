@@ -270,7 +270,7 @@ export function Segmented<T extends string>({
 
 export const buttonClass = {
   primary:
-    "inline-flex min-h-12 items-center justify-center gap-2 rounded-[14px] bg-accent px-4 py-3 text-base font-extrabold text-stone-900 hover:brightness-95 active:brightness-90 disabled:opacity-50",
+    "inline-flex min-h-12 items-center justify-center gap-2 rounded-[14px] bg-accent px-4 py-3 text-base font-extrabold text-white hover:brightness-110 active:brightness-95 disabled:opacity-50",
   secondary:
     "inline-flex min-h-12 items-center justify-center gap-2 rounded-[14px] border-[1.5px] border-stone-900 bg-white px-4 py-3 text-base font-bold text-stone-900 active:bg-stone-100 disabled:opacity-50",
   ghost: "inline-flex min-h-11 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-sm font-bold text-accent-deep active:bg-accent-soft",

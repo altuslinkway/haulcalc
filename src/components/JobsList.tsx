@@ -157,7 +157,7 @@ function Stat({ label, value, accent = false }: { label: string; value: string; 
   return (
     <div className="rounded-2xl bg-stone-800 px-3 py-2.5">
       <p className="text-xs text-stone-400">{label}</p>
-      <p className={`text-lg font-extrabold tabular-nums ${accent ? "text-accent" : ""}`}>{value}</p>
+      <p className={`text-lg font-extrabold tabular-nums ${accent ? "text-accent-bright" : ""}`}>{value}</p>
     </div>
   );
 }

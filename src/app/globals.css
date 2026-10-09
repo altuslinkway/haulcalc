@@ -1,9 +1,10 @@
 @import "tailwindcss";
 
 /*
- * The HaulCalc look: asphalt ink, cool grey ground, hi-vis orange.
- * The stone scale is remapped to these greys so every screen shares them.
- * Text on the accent is always ink, never white (white fails contrast).
+ * The HaulCalc look: deep navy ink, cool grey ground, work-truck blue.
+ * The stone scale is remapped to these cool greys so every screen shares them.
+ * Text on the blue accent is white; on dark navy, use accent-bright instead
+ * (plain accent is too dark to read there).
  */
 @theme inline {
   --font-sans: var(--font-barlow), system-ui, sans-serif;
@@ -11,21 +12,22 @@
 }
 
 @theme {
-  --color-stone-50: #f7f8f6;
-  --color-stone-100: #f2f3f1;
-  --color-stone-200: #d9dcd8;
-  --color-stone-300: #c9cdc8;
-  --color-stone-400: #a7ada9;
-  --color-stone-500: #5b615e;
-  --color-stone-600: #4a504d;
-  --color-stone-700: #2e3330;
-  --color-stone-800: #1e2220;
-  --color-stone-900: #111413;
+  --color-stone-50: #f8fafc;
+  --color-stone-100: #f1f4f8;
+  --color-stone-200: #dce2ea;
+  --color-stone-300: #c8d0db;
+  --color-stone-400: #9aa5b4;
+  --color-stone-500: #5a6474;
+  --color-stone-600: #475161;
+  --color-stone-700: #2d3542;
+  --color-stone-800: #1c2330;
+  --color-stone-900: #0f1623;
 
-  --color-accent: #ff5b1f;
-  --color-accent-deep: #8a3a0c;
-  --color-accent-soft: #fff1ea;
-  --color-accent-line: #ffc9b3;
+  --color-accent: #2563eb;
+  --color-accent-bright: #7aa7ff;
+  --color-accent-deep: #1d4ed8;
+  --color-accent-soft: #eef4ff;
+  --color-accent-line: #c7d7fe;
 }
 
 :root {
