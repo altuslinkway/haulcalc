@@ -69,3 +69,39 @@ function joinList(items: string[]): string {
 function midSentence(name: string): string {
   return /^[A-Z][a-z]/.test(name) ? name[0].toLowerCase() + name.slice(1) : name;
 }
+
+/** A text-message link that opens the phone's messages app, addressed to the customer when there's a number. */
+export function smsHref(phone: string, body: string): string {
+  const to = phone.replace(/[^\d+]/g, "");
+  return `sms:${to}?&body=${encodeURIComponent(body)}`;
+}
+
+/** The quote text for a quick quote, priced without photos. */
+export function buildQuickQuoteMessage(settings: Settings, details: JobDetails, what: string, price: number): string {
+  const greeting = details.customerName.trim() ? `Hi ${details.customerName.trim()}!` : "Hi!";
+  const from = settings.businessName.trim() ? ` This is ${settings.businessName.trim()}.` : "";
+  return [
+    `${greeting}${from} Thanks for reaching out.`,
+    `For ${what}, your price is ${money(price)}, including labor, loading, hauling and disposal.`,
+    "We'll confirm the final price on site before we start, and it won't go over that unless there's more to take. Want to get on the schedule?",
+  ].join("\n\n");
+}
+
+/** Sent after the job: thanks, the total, and how to pay if they haven't yet. */
+export function buildThankYouMessage(
+  settings: Settings,
+  customerName: string,
+  total: number,
+  paid: boolean,
+): string {
+  const name = customerName.trim();
+  const pay = settings.paymentInfo.trim();
+  const sign = settings.businessName.trim() ? `\n\n${settings.businessName.trim()}` : "";
+  return [
+    `Thanks${name ? `, ${name}` : ""}! It was great working with you, and everything's gone.`,
+    paid
+      ? `Got your payment of ${money(total)}. Thank you!`
+      : `Your total is ${money(total)}.${pay ? ` You can pay with ${pay}.` : ""}`,
+    `If you know anyone who needs junk hauled, we'd love the referral.${sign}`,
+  ].join("\n\n");
+}

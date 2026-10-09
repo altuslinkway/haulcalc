@@ -5,19 +5,51 @@ import { useMemo, useRef, useState } from "react";
 import { MAX_PHOTOS } from "@/lib/ai/limits";
 import { postJson } from "@/lib/client/api";
 import { sendFeedback, toFeedbackLines } from "@/lib/client/feedback";
-import { saveJob } from "@/lib/client/jobsStore";
+import { saveJob, type SavedJob } from "@/lib/client/jobsStore";
 import { preparePhoto, type Photo } from "@/lib/client/photos";
 import { useSettings } from "@/lib/client/settingsStore";
 import { DEFAULT_DETAILS, TRAILERS } from "@/lib/pricing/defaults";
-import { capacityOf, computeQuote, LOAD_SIZES } from "@/lib/pricing/engine";
+import { capacityOf, computeQuote, LOAD_SIZES, loadPrice } from "@/lib/pricing/engine";
 import { setLoadSize } from "@/lib/pricing/estimate";
-import { buildPhotoRequestMessage, buildQuoteMessage, type QuoteStyle } from "@/lib/pricing/message";
+import {
+  buildPhotoRequestMessage,
+  buildQuickQuoteMessage,
+  buildQuoteMessage,
+  smsHref,
+  type QuoteStyle,
+} from "@/lib/pricing/message";
+import { EMPTY_PICK, quickEstimate, quickSummary, type QuickPick } from "@/lib/pricing/quick";
 import type { JobDetails, JobEstimate, Quote, Settings } from "@/lib/pricing/types";
 import { ItemsEditor } from "./ItemsEditor";
 import { buttonClass, Card, money, moneyRange, NumberField, PageTitle, Segmented, Stepper, TextArea, TextField } from "./ui";
 
+type Mode = "photos" | "quick";
+
+const newId = () => crypto.randomUUID();
+const mid = (r: { low: number; high: number }) => Math.round((r.low + r.high) / 2);
+
+/** The parts of a saved job that are the same however it was priced. */
+function jobBase(details: JobDetails, quote: Quote): Omit<SavedJob, "id" | "summary" | "source" | "sentPrice" | "aiCubicYards" | "quotedCubicYards" | "calibrationPct" | "shared" | "trailerCubicYards"> {
+  return {
+    createdAt: new Date().toISOString(),
+    customerName: details.customerName.trim(),
+    customerPhone: details.customerPhone.trim(),
+    priceLow: quote.total.low,
+    priceHigh: quote.total.high,
+    estCosts: { dump: mid(quote.costs.dump), gas: mid(quote.costs.gas), helpers: mid(quote.costs.helpers) },
+    status: "quoted",
+    jobDate: null,
+    doneAt: null,
+    finalPrice: null,
+    paidWith: null,
+    dumpFeePaid: null,
+    outcome: null,
+  };
+}
+
 export function QuoteFlow() {
   const settings = useSettings();
+  const [mode, setMode] = useState<Mode>("photos");
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [notes, setNotes] = useState("");
   const [details, setDetails] = useState<JobDetails>(DEFAULT_DETAILS);
@@ -28,6 +60,9 @@ export function QuoteFlow() {
   const [askOpen, setAskOpen] = useState(false);
   const [busy, setBusy] = useState<"photos" | "analyzing" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pick, setPick] = useState<QuickPick>(EMPTY_PICK);
+  // Made when the quick quote is first sent: random ids can't be made while the page is prerendered.
+  const quickId = useRef<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -35,6 +70,10 @@ export function QuoteFlow() {
     () => (estimate ? computeQuote(settings, estimate, details) : null),
     [settings, estimate, details],
   );
+  const quick = useMemo(() => {
+    const e = quickEstimate(settings, pick);
+    return { estimate: e, quote: computeQuote(settings, e, details), what: quickSummary(settings, pick) };
+  }, [settings, pick, details]);
   const setDetail = <K extends keyof JobDetails>(key: K, value: JobDetails[K]) =>
     setDetails((d) => ({ ...d, [key]: value }));
 
@@ -71,7 +110,7 @@ export function QuoteFlow() {
       });
       setEstimate(res.estimate);
       setAiEstimate(res.estimate);
-      setQuoteId(crypto.randomUUID());
+      setQuoteId(newId());
       setDemo(Boolean(res.demo));
       setDetails((d) => ({ ...d, stairsFlights: null }));
       requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -88,6 +127,8 @@ export function QuoteFlow() {
     setDetails(DEFAULT_DETAILS);
     setEstimate(null);
     setAiEstimate(null);
+    setPick(EMPTY_PICK);
+    quickId.current = null;
     setError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -98,19 +139,16 @@ export function QuoteFlow() {
     const totalCy = (e: JobEstimate) => e.lines.reduce((s, l) => s + l.cubicYards, 0);
     const shared = settings.learning.shareData;
     saveJob({
+      ...jobBase(details, quote),
       id: quoteId,
-      createdAt: new Date().toISOString(),
-      customerName: details.customerName,
       summary: estimate.summary,
-      priceLow: quote.total.low,
-      priceHigh: quote.total.high,
+      source: "photos",
       sentPrice,
       aiCubicYards: totalCy(aiEstimate),
       quotedCubicYards: totalCy(estimate),
       trailerCubicYards: capacityOf(settings),
       calibrationPct: quote.volume.calibrationPct,
       shared,
-      outcome: null,
     });
     if (shared) {
       sendFeedback({
@@ -126,6 +164,67 @@ export function QuoteFlow() {
       });
     }
   }
+
+  /** Quick quotes go to Jobs too. There's no AI guess in them, so nothing goes to shared learning. */
+  function recordQuickSent(sentPrice: number | null) {
+    const cy = quick.estimate.lines.reduce((s, l) => s + l.cubicYards, 0);
+    saveJob({
+      ...jobBase(details, quick.quote),
+      id: (quickId.current ??= newId()),
+      summary: `Quick quote: ${quick.what}`,
+      source: "quick",
+      sentPrice,
+      aiCubicYards: 0,
+      quotedCubicYards: cy,
+      trailerCubicYards: capacityOf(settings),
+      calibrationPct: 0,
+      shared: false,
+    });
+  }
+
+  const photoCard = (
+    <Card
+      title="Customer photos"
+      subtitle="The pictures your customer sent. More angles, better price."
+      action={photos.length > 0 && <span className="pt-1 text-sm whitespace-nowrap text-stone-500 tabular-nums">{photos.length} of {MAX_PHOTOS}</span>}
+    >
+      <div className="grid grid-cols-4 gap-2">
+        {photos.map((p, i) => (
+          <div key={p.id} className="relative aspect-square overflow-hidden rounded-[14px] bg-stone-200">
+            {/* eslint-disable-next-line @next/next/no-img-element -- local data URL preview */}
+            <img src={p.previewUrl} alt={`Customer photo ${i + 1}`} className="h-full w-full object-cover" />
+            <button
+              type="button"
+              aria-label={`Remove photo ${i + 1}`}
+              onClick={() => setPhotos((ps) => ps.filter((x) => x.id !== p.id))}
+              className="absolute top-1 right-1 flex h-8 w-8 items-center justify-center rounded-full bg-stone-900/75 text-stone-100"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+        ))}
+        {photos.length < MAX_PHOTOS && (
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            disabled={busy !== null}
+            className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-[14px] border-2 border-dashed border-stone-400 bg-stone-50 text-stone-600 active:bg-stone-100 ${
+              photos.length === 0 ? "col-span-4 aspect-auto min-h-28" : ""
+            }`}
+          >
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+              <path d="M12 10v6M9 13h6" />
+            </svg>
+            <span className="text-[13px] font-bold">{busy === "photos" ? "Loading…" : photos.length === 0 ? "Add the customer's photos" : "Add"}</span>
+          </button>
+        )}
+      </div>
+      <input ref={fileInput} type="file" accept="image/*" multiple className="hidden" onChange={(e) => addPhotos(e.target.files)} />
+    </Card>
+  );
 
   return (
     <div className="space-y-4">
@@ -146,170 +245,291 @@ export function QuoteFlow() {
           </button>
         }
       />
-      {askOpen && <PhotoRequest settings={settings} onClose={() => setAskOpen(false)} />}
+      {askOpen && <PhotoRequest settings={settings} phone={details.customerPhone} onClose={() => setAskOpen(false)} />}
 
-      <Card
-        title="Customer photos"
-        subtitle="The pictures your customer sent. More angles, better price."
-        action={photos.length > 0 && <span className="pt-1 text-sm whitespace-nowrap text-stone-500 tabular-nums">{photos.length} of {MAX_PHOTOS}</span>}
-      >
-        <div className="grid grid-cols-4 gap-2">
-          {photos.map((p, i) => (
-            <div key={p.id} className="relative aspect-square overflow-hidden rounded-[14px] bg-stone-200">
-              {/* eslint-disable-next-line @next/next/no-img-element -- local data URL preview */}
-              <img src={p.previewUrl} alt={`Customer photo ${i + 1}`} className="h-full w-full object-cover" />
-              <button
-                type="button"
-                aria-label={`Remove photo ${i + 1}`}
-                onClick={() => setPhotos((ps) => ps.filter((x) => x.id !== p.id))}
-                className="absolute top-1 right-1 flex h-8 w-8 items-center justify-center rounded-full bg-stone-900/75 text-stone-100"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-                  <path d="M6 6l12 12M18 6L6 18" />
-                </svg>
-              </button>
-            </div>
-          ))}
-          {photos.length < MAX_PHOTOS && (
-            <button
-              type="button"
-              onClick={() => fileInput.current?.click()}
-              disabled={busy !== null}
-              className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-[14px] border-2 border-dashed border-stone-400 bg-stone-50 text-stone-600 active:bg-stone-100 ${
-                photos.length === 0 ? "col-span-4 aspect-auto min-h-28" : ""
-              }`}
-            >
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
-                <path d="M12 10v6M9 13h6" />
-              </svg>
-              <span className="text-[13px] font-bold">{busy === "photos" ? "Loading…" : photos.length === 0 ? "Add the customer's photos" : "Add"}</span>
-            </button>
-          )}
-        </div>
-        <input
-          ref={fileInput}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => addPhotos(e.target.files)}
-        />
-      </Card>
+      <div role="radiogroup" aria-label="How to price it" className="grid grid-cols-2 gap-1 rounded-[14px] bg-stone-200/70 p-1">
+        {(
+          [
+            { value: "photos", label: "From photos" },
+            { value: "quick", label: "Quick quote" },
+          ] as const
+        ).map((m) => (
+          <button
+            key={m.value}
+            type="button"
+            role="radio"
+            aria-checked={mode === m.value}
+            onClick={() => setMode(m.value)}
+            className={`min-h-11 rounded-[11px] text-[15px] font-bold ${mode === m.value ? "bg-stone-900 text-stone-100" : "text-stone-700"}`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {mode === "photos" && photoCard}
 
       <Card>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
+            <TextField label="Customer" placeholder="Name" value={details.customerName} onChange={(v) => setDetail("customerName", v)} />
             <TextField
-              label="Customer"
-              placeholder="Name"
-              value={details.customerName}
-              onChange={(v) => setDetail("customerName", v)}
-            />
-            <NumberField
-              label="Miles away"
-              suffix="mi"
-              value={details.distanceMiles}
-              onChange={(v) => setDetail("distanceMiles", v)}
+              label="Phone"
+              placeholder="To text the quote"
+              inputMode="tel"
+              value={details.customerPhone}
+              onChange={(v) => setDetail("customerPhone", v)}
             />
           </div>
-          <TextArea
-            label="What they said"
-            placeholder="e.g. Everything in the garage plus a mattress upstairs."
-            value={notes}
-            onChange={setNotes}
-            rows={2}
+          <NumberField
+            label="Miles away"
+            suffix="mi"
+            value={details.distanceMiles}
+            onChange={(v) => setDetail("distanceMiles", v)}
+            hint={settings.extras.perMile > 0 ? `First ${settings.extras.freeMiles} mi free, then ${money(settings.extras.perMile)} a mile` : undefined}
           />
+          {mode === "photos" && (
+            <TextArea
+              label="What they said"
+              placeholder="e.g. Everything in the garage plus a mattress upstairs."
+              value={notes}
+              onChange={setNotes}
+              rows={2}
+            />
+          )}
         </div>
       </Card>
 
-      {!askOpen && (
-        <button
-          type="button"
-          onClick={() => {
-            setAskOpen(true);
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
-          className="flex min-h-[52px] w-full items-center justify-between gap-3 rounded-2xl border border-accent-line bg-accent-soft px-4 py-2 text-left"
-        >
-          <span>
-            <span className="block text-[15px] font-bold">
-              {settings.standardQuestions.length > 0
-                ? `Your ${settings.standardQuestions.length} customer question${settings.standardQuestions.length === 1 ? "" : "s"}`
-                : "Ask the customer for photos"}
-            </span>
-            <span className="block text-[13px] text-accent-deep">Sent with every photo request</span>
-          </span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="text-accent-deep" aria-hidden="true">
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </button>
-      )}
+      {mode === "quick" ? (
+        <QuickQuote
+          settings={settings}
+          pick={pick}
+          onPick={setPick}
+          details={details}
+          onDetails={setDetails}
+          estimate={quick.estimate}
+          quote={quick.quote}
+          what={quick.what}
+          onSent={recordQuickSent}
+          onReset={reset}
+        />
+      ) : (
+        <>
+          {!askOpen && (
+            <button
+              type="button"
+              onClick={() => {
+                setAskOpen(true);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="flex min-h-[52px] w-full items-center justify-between gap-3 rounded-2xl border border-accent-line bg-accent-soft px-4 py-2 text-left"
+            >
+              <span>
+                <span className="block text-[15px] font-bold">
+                  {settings.standardQuestions.length > 0
+                    ? `Your ${settings.standardQuestions.length} customer question${settings.standardQuestions.length === 1 ? "" : "s"}`
+                    : "Ask the customer for photos"}
+                </span>
+                <span className="block text-[13px] text-accent-deep">Sent with every photo request</span>
+              </span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="text-accent-deep" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+          )}
 
-      {error && (
-        <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
-          {error}
-        </p>
-      )}
+          {error && (
+            <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
+              {error}
+            </p>
+          )}
 
-      <button
-        type="button"
-        className={`${buttonClass.primary} min-h-[60px] w-full rounded-2xl text-lg`}
-        disabled={photos.length === 0 || busy !== null}
-        onClick={analyze}
-      >
-        {busy === "analyzing" ? (
-          <>
-            <Spinner /> Sizing up the job…
-          </>
-        ) : estimate ? (
-          "Re-analyze photos"
-        ) : (
-          "Price this job"
-        )}
-      </button>
-      {busy === "analyzing" && <p className="text-center text-sm text-stone-500">Usually takes 15–40 seconds.</p>}
-
-      {estimate && quote && (
-        <div ref={resultsRef} className="scroll-mt-20 space-y-4 pt-2">
-          <PriceHero
-            quote={quote}
-            estimate={estimate}
-            settings={settings}
-            customerName={details.customerName}
-            demo={demo}
-            onChange={setEstimate}
-          />
-          {quote.warnings.length > 0 && <Warnings warnings={quote.warnings} />}
-          <WhatWeSaw estimate={estimate} />
-          <ItemsEditor
-            settings={settings}
-            estimate={estimate}
-            onChange={setEstimate}
-            onReset={
-              aiEstimate
-                ? () => {
-                    setEstimate(aiEstimate);
-                    setDetails((d) => ({ ...d, stairsFlights: null }));
-                  }
-                : undefined
-            }
-          />
-          <Adjust estimate={estimate} onChange={setEstimate} details={details} onDetailsChange={setDetails} />
-          <Breakdown quote={quote} settings={settings} />
-          <CustomerMessage
-            settings={settings}
-            estimate={estimate}
-            details={details}
-            quote={quote}
-            onSent={recordSent}
-          />
-          <button type="button" className={`${buttonClass.secondary} w-full`} onClick={reset}>
-            Start a new quote
+          <button
+            type="button"
+            className={`${buttonClass.primary} min-h-[60px] w-full rounded-2xl text-lg`}
+            disabled={photos.length === 0 || busy !== null}
+            onClick={analyze}
+          >
+            {busy === "analyzing" ? (
+              <>
+                <Spinner /> Sizing up the job…
+              </>
+            ) : estimate ? (
+              "Re-analyze photos"
+            ) : (
+              "Price this job"
+            )}
           </button>
-        </div>
+          {busy === "analyzing" && <p className="text-center text-sm text-stone-500">Usually takes 15–40 seconds.</p>}
+
+          {estimate && quote && (
+            <div ref={resultsRef} className="scroll-mt-20 space-y-4 pt-2">
+              <PriceHero
+                quote={quote}
+                estimate={estimate}
+                settings={settings}
+                customerName={details.customerName}
+                demo={demo}
+                onChange={setEstimate}
+              />
+              {quote.warnings.length > 0 && <Warnings warnings={quote.warnings} />}
+              <WhatWeSaw estimate={estimate} />
+              <ItemsEditor
+                settings={settings}
+                estimate={estimate}
+                onChange={setEstimate}
+                onReset={
+                  aiEstimate
+                    ? () => {
+                        setEstimate(aiEstimate);
+                        setDetails((d) => ({ ...d, stairsFlights: null }));
+                      }
+                    : undefined
+                }
+              />
+              <Adjust estimate={estimate} onChange={setEstimate} details={details} onDetailsChange={setDetails} />
+              <Breakdown quote={quote} settings={settings} />
+              <SendQuote
+                key={quoteId}
+                quote={quote}
+                details={details}
+                allowRange
+                build={(style, price) => buildQuoteMessage(settings, estimate, details, quote, style, price)}
+                onSent={recordSent}
+              />
+              <button type="button" className={`${buttonClass.secondary} w-full`} onClick={reset}>
+                Start a new quote
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+const QUICK_SIZES = [{ key: "none", label: "Items only", fraction: 0 }, ...LOAD_SIZES] as const;
+
+function QuickQuote({
+  settings,
+  pick,
+  onPick,
+  details,
+  onDetails,
+  estimate,
+  quote,
+  what,
+  onSent,
+  onReset,
+}: {
+  settings: Settings;
+  pick: QuickPick;
+  onPick: (p: QuickPick) => void;
+  details: JobDetails;
+  onDetails: (d: JobDetails) => void;
+  estimate: JobEstimate;
+  quote: Quote;
+  what: string;
+  onSent: (sentPrice: number | null) => void;
+  onReset: () => void;
+}) {
+  const setCount = (id: string, n: number) => onPick({ ...pick, items: { ...pick.items, [id]: Math.max(0, n) } });
+  const empty = estimate.lines.length === 0;
+
+  return (
+    <>
+      <Card title="How much junk?" subtitle="Charged by the load. Add flat-rate items below.">
+        <div role="radiogroup" aria-label="Load size" className="grid grid-cols-5 gap-1.5">
+          {QUICK_SIZES.map((size) => {
+            const on = pick.fraction === size.fraction;
+            return (
+              <button
+                key={size.key}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => onPick({ ...pick, fraction: size.fraction })}
+                className={`flex min-h-[64px] flex-col items-center justify-center gap-0.5 rounded-[14px] px-1 ${
+                  on ? "bg-stone-900 text-stone-100" : "border border-stone-300 bg-stone-50 text-stone-900 active:bg-stone-100"
+                }`}
+              >
+                <span className={`font-extrabold ${size.fraction === 0 ? "text-[13px] leading-tight" : "text-[17px]"}`}>{size.label}</span>
+                <span className={`text-xs font-semibold tabular-nums ${on ? "text-stone-300" : "text-stone-500"}`}>
+                  {size.fraction === 0 ? "$0" : money(loadPrice(size.fraction, settings))}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card title="Plus items">
+        <ul className="divide-y divide-stone-100">
+          {settings.flatItems.map((item) => (
+            <li key={item.id} className="flex min-h-14 items-center justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block text-[15px] font-semibold">{item.name}</span>
+                <span className="block text-[13px] text-stone-500">{money(item.price)} each</span>
+              </span>
+              <Stepper label={item.name} value={pick.items[item.id] ?? 0} onChange={(n) => setCount(item.id, n)} />
+            </li>
+          ))}
+          <li className="flex min-h-14 items-center justify-between gap-3">
+            <span>
+              <span className="block text-[15px] font-semibold">Flights of stairs</span>
+              <span className="block text-[13px] text-stone-500">{money(settings.extras.stairsPerFlight)} each</span>
+            </span>
+            <Stepper
+              label="flights of stairs"
+              value={details.stairsFlights ?? 0}
+              onChange={(n) => onDetails({ ...details, stairsFlights: n })}
+            />
+          </li>
+        </ul>
+        {settings.flatItems.length === 0 && (
+          <p className="text-sm text-stone-500">
+            No flat-rate items yet.{" "}
+            <Link href="/settings" className="font-bold text-accent-deep">
+              Add some in My rates
+            </Link>
+          </p>
+        )}
+      </Card>
+
+      <section className="rounded-3xl bg-stone-900 p-5 text-stone-100" aria-live="polite">
+        <p className="text-xs font-bold tracking-[0.12em] text-stone-400 uppercase">Price</p>
+        {empty ? (
+          <p className="mt-1 text-[15px] text-stone-300">Pick a load size or some items.</p>
+        ) : (
+          <>
+            <p className="mt-1 font-display text-[52px] leading-none font-extrabold tracking-[-0.02em] tabular-nums">
+              {moneyRange(quote.total.low, quote.total.high)}
+            </p>
+            <p className="mt-1 text-[15px] text-stone-300">
+              {what[0].toUpperCase() + what.slice(1)}
+              {quote.minimumApplied ? ", your minimum" : ""}
+            </p>
+          </>
+        )}
+      </section>
+
+      {!empty && (
+        <>
+          {quote.warnings.length > 0 && <Warnings warnings={quote.warnings} />}
+          <Breakdown quote={quote} settings={settings} />
+          <SendQuote
+            quote={quote}
+            details={details}
+            allowRange={false}
+            build={(_, price) => buildQuickQuoteMessage(settings, details, what, price)}
+            onSent={onSent}
+          />
+          <button type="button" className={`${buttonClass.secondary} w-full`} onClick={onReset}>
+            Start a new quote
+          </button>
+        </>
+      )}
+    </>
   );
 }
 
@@ -317,12 +537,22 @@ function Spinner() {
   return <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden />;
 }
 
-function CopyButton({ text, label = "Copy", onCopied }: { text: string; label?: string; onCopied?: () => void }) {
+function CopyButton({
+  text,
+  label = "Copy",
+  onCopied,
+  variant = "primary",
+}: {
+  text: string;
+  label?: string;
+  onCopied?: () => void;
+  variant?: "primary" | "secondary";
+}) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
-      className={buttonClass.primary}
+      className={buttonClass[variant]}
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);
@@ -339,7 +569,7 @@ function CopyButton({ text, label = "Copy", onCopied }: { text: string; label?: 
   );
 }
 
-function PhotoRequest({ settings, onClose }: { settings: Settings; onClose: () => void }) {
+function PhotoRequest({ settings, phone, onClose }: { settings: Settings; phone: string; onClose: () => void }) {
   const message = buildPhotoRequestMessage(settings);
   return (
     <section className="rounded-[20px] border border-stone-200 bg-white p-4">
@@ -367,7 +597,7 @@ function PhotoRequest({ settings, onClose }: { settings: Settings; onClose: () =
       </Link>
       <div className="mt-1 grid grid-cols-2 gap-2">
         <CopyButton text={message} />
-        <a className={buttonClass.secondary} href={`sms:?&body=${encodeURIComponent(message)}`}>
+        <a className={buttonClass.secondary} href={smsHref(phone, message)}>
           Text it
         </a>
       </div>
@@ -629,66 +859,57 @@ function CostRow({ label, value }: { label: string; value: { low: number; high: 
   );
 }
 
-function CustomerMessage({
-  settings,
-  estimate,
-  details,
+function SendQuote({
   quote,
+  details,
+  allowRange,
+  build,
   onSent,
 }: {
-  settings: Settings;
-  estimate: JobEstimate;
-  details: JobDetails;
   quote: Quote;
+  details: JobDetails;
+  /** Photo quotes can go out as a range; quick quotes are one price. */
+  allowRange: boolean;
+  build: (style: QuoteStyle, price: number) => string;
   onSent: (sentPrice: number | null) => void;
 }) {
-  const [style, setStyle] = useState<QuoteStyle>("range");
+  const [style, setStyle] = useState<QuoteStyle>(allowRange ? "range" : "single");
   const [price, setPrice] = useState<number | null>(null);
   // Hand edits stick until the generated message changes underneath them.
   const [edit, setEdit] = useState<{ base: string; text: string } | null>(null);
 
   const singlePrice = price ?? quote.suggested;
-  const generated = buildQuoteMessage(settings, estimate, details, quote, style, singlePrice);
+  const generated = build(style, singlePrice);
   const message = edit?.base === generated ? edit.text : generated;
-  const canShare = typeof navigator !== "undefined" && "share" in navigator;
   const sent = () => onSent(style === "single" ? singlePrice : null);
+  const name = details.customerName.trim();
 
   return (
     <Card title="Send the quote" subtitle="Edit anything before sending. Sent quotes are saved under Jobs.">
       <div className="space-y-3">
-        <Segmented
-          label="Quote style"
-          value={style}
-          onChange={setStyle}
-          options={[
-            { value: "range", label: "Price range" },
-            { value: "single", label: "Single price" },
-          ]}
-        />
+        {allowRange && (
+          <Segmented
+            label="Quote style"
+            value={style}
+            onChange={setStyle}
+            options={[
+              { value: "range", label: "Price range" },
+              { value: "single", label: "Single price" },
+            ]}
+          />
+        )}
         {style === "single" && (
           <NumberField label="Price to quote" prefix="$" value={singlePrice} onChange={setPrice} inputMode="numeric" />
         )}
-        <TextArea label="Message" value={message} onChange={(text) => setEdit({ base: generated, text })} rows={9} />
-        <div className="grid grid-cols-2 gap-2">
-          <CopyButton text={message} onCopied={sent} />
-          {canShare ? (
-            <button
-              type="button"
-              className={buttonClass.secondary}
-              onClick={() =>
-                navigator
-                  .share({ text: message })
-                  .then(sent)
-                  .catch(() => {})
-              }
-            >
-              Share…
-            </button>
-          ) : (
-            <a className={buttonClass.secondary} href={`sms:?&body=${encodeURIComponent(message)}`} onClick={sent}>
-              Text it
-            </a>
-          )}
+        <TextArea label="Message" value={message} onChange={(text) => setEdit({ base: generated, text })} rows={8} />
+        <div className="grid grid-cols-[1fr_auto] gap-2">
+          <a className={buttonClass.primary} href={smsHref(details.customerPhone, message)} onClick={sent}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 12l16-8-6 16-3-7-7-1z" />
+            </svg>
+            {name && details.customerPhone.trim() ? `Text it to ${name}` : "Text it"}
+          </a>
+          <CopyButton text={message} onCopied={sent} variant="secondary" />
         </div>
       </div>
     </Card>

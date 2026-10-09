@@ -51,12 +51,15 @@ export const DEFAULT_SETTINGS: Settings = {
     "When would you like it gone?",
   ],
 
+  paymentInfo: "",
+
   learning: { shareData: true, useNetwork: true },
   calibrationPct: null,
 };
 
 export const DEFAULT_DETAILS: JobDetails = {
   customerName: "",
+  customerPhone: "",
   distanceMiles: 0,
   stairsFlights: null,
 };

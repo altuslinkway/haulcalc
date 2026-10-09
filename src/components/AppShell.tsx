@@ -57,7 +57,8 @@ export function Logo({ size = "md" }: { size?: "sm" | "md" }) {
 /** The app's frame on a phone: a slim top bar and the three tabs along the bottom. */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const waiting = useJobs().filter((j) => !j.outcome).length;
+  // Booked jobs are the ones waiting on the owner: mark them done once the work's finished.
+  const waiting = useJobs().filter((j) => j.status === "booked").length;
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -103,7 +104,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {t.label}
                 {t.href === "/jobs" && waiting > 0 && (
                   <span className="absolute top-1 left-[calc(50%+6px)] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-extrabold text-stone-900 ring-2 ring-stone-900">
-                    <span className="sr-only">, needing feedback: </span>
+                    <span className="sr-only">, booked: </span>
                     {waiting}
                   </span>
                 )}

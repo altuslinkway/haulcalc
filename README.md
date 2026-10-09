@@ -14,8 +14,20 @@ Quote junk removal jobs from customer photos in seconds. Built for independent h
    - **A range, not a guess.** It spreads around what's visible by how sure the AI is, leaves 10% room for what the photos don't show (20% for multi-room jobs or unclear photos), and applies any learned correction. The owner doesn't set any of this.
    - Never below the **minimum charge**; otherwise rounded to $5.
 5. **What you'd keep.** Dump fees by weight, gas for the drive and dump run, and helper pay come out of the price, with a heads-up when costs eat most of it.
-6. **Send it.** Copy, share, or text the quote, and it's saved under **Jobs**.
+6. **Send it.** Text it straight to the customer's number (or copy it), and it's saved under **Jobs**.
 7. **It gets smarter with every job** (see below).
+
+**No photos? Quick quote.** On the phone with a customer, tap the load size (or "items only"), add flat-rate items and stairs, and the price is ready to text. Same pricing engine, one price, no AI.
+
+## Jobs and money
+
+Built for weekend haulers, not a CRM: each sent quote is a card that moves **Quoted → Booked → Done** (or "Didn't book").
+
+- **They booked:** optionally set the job day. Booked jobs show as a badge on the Jobs tab until they're marked done.
+- **Mark done:** what you charged, how you were paid (cash, Venmo, card, not yet), the dump fee if you have the ticket, and for photo quotes how big the job really was (that rating feeds the learning below).
+- **The month at a glance:** money made, what you kept after dump fees, gas and helper pay, dump fees, and what's booked and coming up. Step back through earlier months.
+- **Thank-you text:** one tap sends thanks, the total, and your payment info (set under My rates → Getting paid).
+- **Backup:** everything lives on the phone, so My rates can save a backup file and restore it on another phone.
 
 ## How estimates improve over time
 
@@ -56,7 +68,8 @@ npm run lint
 
 | Path | What's there |
 | --- | --- |
-| `src/lib/pricing/` | Data model, default rates, pricing engine, estimate edits, quote and photo-request messages, rate-card import, calibration. No AI and no UI, fully unit-tested. |
+| `src/lib/pricing/` | Data model, default rates, pricing engine, estimate edits, quick quotes, customer messages, rate-card import, calibration. No AI and no UI, fully unit-tested. |
+| `src/lib/jobs/` | Job statuses, the monthly money summary, and backup files. |
 | `src/lib/ai/` | Claude prompts, structured-output schemas, API calls, demo data. |
 | `src/lib/learning/` | Shared learning: feedback store (Postgres or a local file), aggregation across owners. |
 | `src/lib/client/` | Browser storage for settings and jobs, photo resizing, sending feedback. |
@@ -71,10 +84,9 @@ The AI model defaults to Claude Opus 5.5 at medium effort (`HAULCALC_MODEL`, `HA
 
 ## Current limits / next steps
 
-- **Settings and jobs are stored in the browser** (one owner, one device). Accounts come next, so rates and job history sync across phones and crew.
+- **Settings and jobs are stored in the browser** (one owner, one device, with a backup file to move phones). Accounts come next, so rates and job history sync on their own.
 - **No login yet.** Anyone with the site's link can run photo analyses on your API key and send feedback. The one-vote-per-device math limits how much a bad actor can skew learning, but accounts are the real fix before opening it up widely.
 - **Photos aren't kept**, so learning works from numbers only. Storing photos (with owner consent) would allow showing the AI similar past jobs as examples, and an accuracy test set for every prompt change.
 - **Customer upload link.** Let customers upload photos directly from a link the owner texts them, instead of forwarding pictures.
-- **Earnings tracking.** Log finished jobs and see what you made each month (next up).
 - **Fixed behind the scenes:** the range spread, the room left for unseen items, loading time per trailer and dump-run time are set in `engine.ts` from the research, so owners don't have to think about them. Owners' logged jobs could tune them later.
 - Deploying to Vercel works out of the box. Photos are shrunk on the phone before upload to stay under request size limits.

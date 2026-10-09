@@ -5,7 +5,9 @@ import { MAX_RATE_CARD_PHOTOS } from "@/lib/ai/limits";
 import type { RateCard } from "@/lib/ai/schemas";
 import { postJson } from "@/lib/client/api";
 import { preparePhoto } from "@/lib/client/photos";
-import { saveSettings, useSettings } from "@/lib/client/settingsStore";
+import { readJobs, replaceJobs } from "@/lib/client/jobsStore";
+import { readSettings, saveSettings, useSettings } from "@/lib/client/settingsStore";
+import { backupFileName, makeBackup, parseBackup } from "@/lib/jobs/backup";
 import { DEFAULT_SETTINGS, TRAILERS } from "@/lib/pricing/defaults";
 import { LOAD_SIZES } from "@/lib/pricing/engine";
 import { applyRateCard, freshId } from "@/lib/pricing/rateCard";
@@ -172,6 +174,17 @@ export function SettingsForm() {
         />
       </Card>
 
+      <Card title="Getting paid" subtitle="Goes in the thank-you text you send after a job.">
+        <TextField
+          label="How customers can pay you"
+          placeholder="e.g. Venmo @joes-hauling"
+          value={settings.paymentInfo}
+          onChange={(v) => update((s) => void (s.paymentInfo = v))}
+        />
+      </Card>
+
+      <Backup />
+
       <details className="group rounded-[20px] border border-stone-200 bg-white">
         <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between px-4 font-display text-xl font-bold">
           More settings
@@ -210,6 +223,53 @@ export function SettingsForm() {
         </div>
       </details>
     </div>
+  );
+}
+
+/** Everything lives on this phone, so owners can save a copy and load it elsewhere. */
+function Backup() {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  function download() {
+    const blob = new Blob([JSON.stringify(makeBackup(readSettings(), readJobs()), null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = backupFileName();
+    a.click();
+    URL.revokeObjectURL(url);
+    setNote({ ok: true, text: "Saved. Keep the file somewhere safe, like your email or cloud drive." });
+  }
+
+  async function restore(files: FileList | null) {
+    const file = files?.[0];
+    if (fileInput.current) fileInput.current.value = "";
+    if (!file) return;
+    try {
+      const { settings, jobs } = parseBackup(await file.text());
+      if (!window.confirm(`Replace your rates and jobs on this phone with the backup (${jobs.length} jobs)?`)) return;
+      saveSettings(settings);
+      replaceJobs(jobs);
+      setNote({ ok: true, text: `Restored your rates and ${jobs.length} jobs.` });
+    } catch (e) {
+      setNote({ ok: false, text: e instanceof Error ? e.message : "Couldn't read that file." });
+    }
+  }
+
+  return (
+    <Card title="Back up your data" subtitle="Your rates and jobs are saved on this phone only. Save a copy to move phones or start fresh.">
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className={buttonClass.secondary} onClick={download}>
+          Save a backup
+        </button>
+        <button type="button" className={buttonClass.secondary} onClick={() => fileInput.current?.click()}>
+          Restore
+        </button>
+      </div>
+      <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={(e) => restore(e.target.files)} />
+      {note && <p className={`mt-2 text-sm ${note.ok ? "text-[#14532d]" : "text-red-700"}`}>{note.text}</p>}
+    </Card>
   );
 }
 

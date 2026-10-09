@@ -78,6 +78,7 @@ export function TextField({
   value,
   onChange,
   placeholder,
+  inputMode,
 }: {
   label: string;
   hint?: string;
@@ -85,11 +86,20 @@ export function TextField({
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  inputMode?: "text" | "tel" | "email";
 }) {
   return (
     <Field label={label} hint={hint} hideLabel={hideLabel}>
       {(id) => (
-        <input id={id} className={inputClass} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+        <input
+          id={id}
+          className={inputClass}
+          value={value}
+          placeholder={placeholder}
+          inputMode={inputMode}
+          type={inputMode === "tel" ? "tel" : "text"}
+          onChange={(e) => onChange(e.target.value)}
+        />
       )}
     </Field>
   );

@@ -18,6 +18,7 @@ export function withDefaults(saved: unknown): Settings {
     extras: { ...d.extras, ...s.extras },
     costs: { ...d.costs, ...s.costs },
     learning: { ...d.learning, ...s.learning },
+    paymentInfo: typeof s.paymentInfo === "string" ? s.paymentInfo : "",
     calibrationPct: s.calibrationPct ?? null,
   };
 }
@@ -109,4 +110,5 @@ function readV2(): Settings | null {
 const store = createLocalStore<Settings>("haulcalc.settings.v3", DEFAULT_SETTINGS, withDefaults, readV2);
 
 export const useSettings = store.use;
+export const readSettings = store.read;
 export const saveSettings = store.save;

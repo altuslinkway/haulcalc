@@ -51,6 +51,8 @@ export interface Settings {
   prohibitedItems: string[];
   /** Asked on every job, in the photo request you send customers. */
   standardQuestions: string[];
+  /** How customers can pay you (a Venmo, Cash App or Zelle name), for the thank-you text. */
+  paymentInfo: string;
 
   /** Pooling anonymous corrections across owners so estimates improve for everyone. */
   learning: {
@@ -107,6 +109,8 @@ export interface JobEstimate {
 /** Details the owner knows that photos can't show. */
 export interface JobDetails {
   customerName: string;
+  /** For texting the quote straight to them. */
+  customerPhone: string;
   /** One-way miles from base to the job. */
   distanceMiles: number;
   /** Overrides the AI's guess when set. */

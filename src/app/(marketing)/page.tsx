@@ -87,14 +87,19 @@ const features = [
     ),
   },
   {
-    title: "See what you keep",
-    text: "Dump fees, gas and helper pay come out of every quote, so you know what's yours before you send it.",
+    title: "Know what you made",
+    text: "Mark a job booked, then done. HaulCalc adds up what you made each month and what you kept after dump fees and gas.",
     icon: <path d="M4 19V5M4 19h16M8 15l4-4 3 3 5-6" />,
   },
   {
-    title: "Heavy loads, handled",
-    text: "Concrete, dirt and shingles are priced by weight, and trips are counted against your trailer's payload, not just its size.",
-    icon: <path d="M12 4v3M6 7h12l3 8a4 4 0 0 1-6 0l3-8M6 7l-3 8a4 4 0 0 0 6 0L6 7M8 21h8M12 7v14" />,
+    title: "On the phone? Quick quote",
+    text: "No photos needed. Tap the load size and the items, and your price is ready to text while they're still on the line.",
+    icon: (
+      <>
+        <rect x="5" y="3" width="14" height="18" rx="2" />
+        <path d="M8 7h8M8 12h2M12 12h2M8 16h2M12 16h2" />
+      </>
+    ),
   },
   {
     title: "Ranges that hold up on site",
@@ -189,7 +194,7 @@ export default function HomePage() {
             </a>
           </div>
           <ul className="m-0 flex list-none flex-wrap gap-x-6 gap-y-2.5 p-0 text-[15px] font-medium text-stone-700">
-            {["Uses your rate card", "Shows what you keep", "Your customers need no app"].map((t) => (
+            {["Uses your rate card", "Tracks what you make", "Your customers need no app"].map((t) => (
               <li key={t} className="flex items-center gap-2">
                 <Check />
                 {t}
