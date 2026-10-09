@@ -7,24 +7,13 @@ import { sendFeedback, toFeedbackLines } from "@/lib/client/feedback";
 import { saveJob } from "@/lib/client/jobsStore";
 import { preparePhoto, type Photo } from "@/lib/client/photos";
 import { useSettings } from "@/lib/client/settingsStore";
-import { DEFAULT_DETAILS, trailerCubicYards } from "@/lib/pricing/defaults";
-import { computeQuote, rangeFactors, sortedTiers, unseenPctFor } from "@/lib/pricing/engine";
+import { DEFAULT_DETAILS, TRAILERS } from "@/lib/pricing/defaults";
+import { computeQuote, LOAD_SIZES, rangeFactors } from "@/lib/pricing/engine";
 import { scaleLoadTo } from "@/lib/pricing/estimate";
 import { buildPhotoRequestMessage, buildQuoteMessage, type QuoteStyle } from "@/lib/pricing/message";
 import type { JobDetails, JobEstimate, Quote, Settings } from "@/lib/pricing/types";
 import { ItemsEditor } from "./ItemsEditor";
-import {
-  buttonClass,
-  Card,
-  money,
-  moneyRange,
-  NumberField,
-  Segmented,
-  Stepper,
-  TextArea,
-  TextField,
-  Toggle,
-} from "./ui";
+import { buttonClass, Card, money, moneyRange, NumberField, Segmented, Stepper, TextArea, TextField } from "./ui";
 
 export function QuoteFlow() {
   const settings = useSettings();
@@ -72,15 +61,18 @@ export function QuoteFlow() {
       const res = await postJson<{ estimate: JobEstimate; demo?: boolean }>("/api/analyze", {
         photos: photos.map(({ mediaType, data }) => ({ mediaType, data })),
         customerNotes: notes,
-        trailer: { name: settings.trailer.name, cubicYards: Math.round(trailerCubicYards(settings.trailer) * 10) / 10 },
-        itemFees: settings.itemFees.map(({ id, name, hint, pricing }) => ({ id, name, hint, pricing })),
+        trailer: {
+          name: TRAILERS.find((t) => t.id === settings.trailer.preset)?.label.toLowerCase() ?? "trailer",
+          cubicYards: settings.trailer.cubicYards,
+        },
+        flatItems: settings.flatItems.map(({ id, name }) => ({ id, name })),
         prohibitedItems: settings.prohibitedItems,
       });
       setEstimate(res.estimate);
       setAiEstimate(res.estimate);
       setQuoteId(crypto.randomUUID());
       setDemo(Boolean(res.demo));
-      setDetails((d) => ({ ...d, stairsFlights: null, unseenPct: null }));
+      setDetails((d) => ({ ...d, stairsFlights: null }));
       requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
@@ -114,7 +106,7 @@ export function QuoteFlow() {
       sentPrice,
       aiCubicYards: totalCy(aiEstimate),
       quotedCubicYards: totalCy(estimate),
-      trailerCubicYards: trailerCubicYards(settings.trailer),
+      trailerCubicYards: settings.trailer.cubicYards,
       calibrationPct: quote.volume.calibrationPct,
       shared,
       outcome: null,
@@ -125,7 +117,7 @@ export function QuoteFlow() {
         quote: {
           scope: aiEstimate.scope,
           confidence: aiEstimate.confidence,
-          trailerCubicYards: trailerCubicYards(settings.trailer),
+          trailerCubicYards: settings.trailer.cubicYards,
           aiLines: toFeedbackLines(aiEstimate.lines),
           sentLines: toFeedbackLines(estimate.lines),
           calibrationPct: quote.volume.calibrationPct,
@@ -218,57 +210,7 @@ export function QuoteFlow() {
               onChange={(v) => setDetail("distanceMiles", v)}
               hint="One way from your base"
             />
-            <NumberField
-              label="Carry from truck"
-              suffix="ft"
-              value={details.carryFeet}
-              onChange={(v) => setDetail("carryFeet", v)}
-              hint={`First ${settings.charges.freeCarryFeet} ft included`}
-            />
           </div>
-          <details className="rounded-[14px] border border-stone-300 bg-white px-3.5 py-1">
-            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 py-1.5">
-              <span className="flex flex-col">
-                <span className="text-[15px] font-semibold">Job options</span>
-                <span className="text-[13px] text-stone-500">Same-day, after-hours, paid lead</span>
-              </span>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M9 6l6 6-6 6" />
-              </svg>
-            </summary>
-            <div className="divide-y divide-stone-200">
-              <Toggle
-                label="Same-day service"
-                hint={`+${money(settings.charges.sameDayFee)}`}
-                checked={details.sameDay}
-                onChange={(v) => setDetail("sameDay", v)}
-              />
-              <Toggle
-                label="After-hours or weekend"
-                hint={`+${settings.charges.afterHoursPct}%`}
-                checked={details.afterHours}
-                onChange={(v) => setDetail("afterHours", v)}
-              />
-              <Toggle
-                label="Packed rooms / heavy sorting"
-                hint={`Hoarder-style jobs, +${settings.charges.hoarderPct}%`}
-                checked={details.hoarder}
-                onChange={(v) => setDetail("hoarder", v)}
-              />
-              <Toggle
-                label="Came from a paid lead"
-                hint="Counts marketing cost in the profit check"
-                checked={details.paidLead}
-                onChange={(v) => setDetail("paidLead", v)}
-              />
-              <Toggle
-                label="Shares a dump run with other jobs"
-                hint="Small jobs on the same trip split the dump time"
-                checked={details.sharedDumpRun}
-                onChange={(v) => setDetail("sharedDumpRun", v)}
-              />
-            </div>
-          </details>
         </div>
       </Card>
 
@@ -301,6 +243,7 @@ export function QuoteFlow() {
           <PriceHero quote={quote} estimate={estimate} settings={settings} customerName={details.customerName} demo={demo} />
           {quote.warnings.length > 0 && <Warnings warnings={quote.warnings} />}
           <WhatWeSaw estimate={estimate} />
+          <Adjust settings={settings} estimate={estimate} onChange={setEstimate} details={details} onDetailsChange={setDetails} />
           <ItemsEditor
             settings={settings}
             estimate={estimate}
@@ -309,12 +252,11 @@ export function QuoteFlow() {
               aiEstimate
                 ? () => {
                     setEstimate(aiEstimate);
-                    setDetails((d) => ({ ...d, stairsFlights: null, unseenPct: null }));
+                    setDetails((d) => ({ ...d, stairsFlights: null }));
                   }
                 : undefined
             }
           />
-          <Adjust settings={settings} estimate={estimate} onChange={setEstimate} details={details} onDetailsChange={setDetails} />
           <Breakdown quote={quote} settings={settings} />
           <CustomerMessage
             settings={settings}
@@ -396,13 +338,13 @@ function PriceHero({
   customerName: string;
   demo: boolean;
 }) {
-  const capacity = trailerCubicYards(settings.trailer);
+  const capacity = settings.trailer.cubicYards;
   const fillLow = Math.min(1, quote.volume.totalCubicYards.low / capacity);
   const fillHigh = Math.min(1, quote.volume.totalCubicYards.high / capacity);
   const range = quote.total.low !== quote.total.high;
   const notes = [
     quote.volume.loads > 1 ? `About ${quote.volume.loads} trailer loads` : "",
-    quote.volume.unseenPct > 0 ? `Includes +${quote.volume.unseenPct}% for things not in the photos` : "",
+    quote.volume.unseenPct > 0 ? `Leaves room for ${quote.volume.unseenPct}% more than the photos show` : "",
     quote.volume.calibrationPct !== 0
       ? `${quote.volume.calibrationPct > 0 ? "+" : ""}${quote.volume.calibrationPct}% learned from ${
           quote.volume.calibrationSource === "owner" ? "your" : "all owners'"
@@ -426,7 +368,7 @@ function PriceHero({
         {moneyRange(quote.total.low, quote.total.high)}
       </p>
       <p className="text-sm text-stone-300">
-        {quote.volume.tierLabel || "Flat-rate items only"}
+        {quote.volume.sizeLabel || "Flat-rate items only"}
         {range && `, middle of the range ${money(quote.suggested)}`}
       </p>
       <div className="mt-4">
@@ -500,61 +442,41 @@ function Adjust({
   details: JobDetails;
   onDetailsChange: (d: JobDetails) => void;
 }) {
-  const capacity = trailerCubicYards(settings.trailer);
-  const auto = unseenPctFor(settings, estimate, { ...details, unseenPct: null });
-  const cushion = details.unseenPct === null ? "auto" : String(details.unseenPct);
+  const capacity = settings.trailer.cubicYards;
 
   return (
-    <Card title="Adjust the job" subtitle="Quick fixes. The price updates as you go.">
+    <Card title="Fix the size" subtitle="Know better than the AI? Tap it. The price updates as you go.">
       <div className="space-y-5">
         <div>
-          <p className="mb-2 text-sm font-medium text-stone-700">It&apos;s really about…</p>
-          <div className="flex flex-wrap gap-2">
-            {sortedTiers(settings.loadTiers).map((t) => (
+          <p className="mb-2 text-sm font-medium text-stone-700">It&apos;s really about a…</p>
+          <div className="grid grid-cols-4 gap-2">
+            {LOAD_SIZES.map((size) => (
               <button
-                key={t.id}
+                key={size.key}
                 type="button"
-                className="min-h-11 rounded-full border border-stone-300 bg-white px-3.5 text-sm font-semibold text-stone-900 active:bg-stone-100"
-                // The tier tapped becomes the top of the range, so the quote reads as that load size.
+                className="min-h-12 rounded-[14px] border border-stone-300 bg-white text-base font-bold text-stone-900 active:bg-stone-100"
+                // The size tapped becomes the top of the range, so the quote reads as that load.
                 onClick={() =>
-                  onChange(scaleLoadTo(estimate, settings, (t.fraction * capacity) / rangeFactors(settings, estimate, details).high))
+                  onChange(scaleLoadTo(estimate, settings, (size.fraction * capacity) / rangeFactors(settings, estimate).high))
                 }
               >
-                {t.label}
+                {size.label}
               </button>
             ))}
           </div>
-          <p className="mt-1 text-xs text-stone-500">
-            Sets the top of the range to that load and resizes everything priced by the load. Flat-rate items stay as they are.
-          </p>
+          <p className="mt-1 text-xs text-stone-500">Flat-rate items keep their own price.</p>
         </div>
 
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm text-stone-900">Flights of stairs</p>
-            <p className="text-xs text-stone-500">{details.stairsFlights === null ? "AI's read from the photos" : "Set by you"}</p>
+            <p className="text-xs text-stone-500">{details.stairsFlights === null ? "From the photos" : "Set by you"}</p>
           </div>
           <Stepper
             label="flights of stairs"
             value={details.stairsFlights ?? estimate.stairsFlights}
             onChange={(stairsFlights) => onDetailsChange({ ...details, stairsFlights })}
           />
-        </div>
-
-        <div>
-          <p className="mb-1 text-sm font-medium text-stone-700">Cushion for things not in the photos</p>
-          <Segmented
-            label="Cushion for unseen items"
-            value={cushion}
-            onChange={(v) => onDetailsChange({ ...details, unseenPct: v === "auto" ? null : Number(v) })}
-            options={[
-              { value: "auto", label: `Auto (${auto}%)` },
-              { value: "0", label: "None" },
-              { value: "10", label: "10%" },
-              { value: "20", label: "20%" },
-            ]}
-          />
-          <p className="mt-1 text-xs text-stone-500">Raises the top of the range only. Auto uses more for multi-room jobs and unclear photos.</p>
         </div>
 
         {estimate.prohibitedItems.length > 0 && (
@@ -566,7 +488,7 @@ function Adjust({
                   <span className="text-sm text-red-900">{p.name}</span>
                   <button
                     type="button"
-                    className="text-xs font-semibold text-red-700"
+                    className="min-h-11 text-xs font-semibold text-red-700"
                     onClick={() =>
                       onChange({ ...estimate, prohibitedItems: estimate.prohibitedItems.filter((_, j) => j !== i) })
                     }
@@ -585,7 +507,7 @@ function Adjust({
 
 function Breakdown({ quote, settings }: { quote: Quote; settings: Settings }) {
   const row = "flex justify-between gap-3 py-1.5 text-sm";
-  const { costs } = settings;
+  const { costs } = quote;
   return (
     <Card title="Price breakdown">
       <ul className="divide-y divide-stone-100">
@@ -600,66 +522,38 @@ function Breakdown({ quote, settings }: { quote: Quote; settings: Settings }) {
         ))}
         {quote.minimumApplied && (
           <li className={row}>
-            <span className="text-stone-600">Raised to your minimum charge</span>
-            <span className="tabular-nums">{money(settings.charges.minimumCharge)}</span>
+            <span className="text-stone-600">Raised to your minimum</span>
+            <span className="tabular-nums">{money(settings.minimumCharge)}</span>
           </li>
         )}
         <li className={`${row} font-semibold`}>
-          <span>Total (rounded to $5)</span>
+          <span>Total</span>
           <span className="tabular-nums">{moneyRange(quote.total.low, quote.total.high)}</span>
         </li>
       </ul>
 
       <details className="mt-4 rounded-xl bg-stone-50 p-3">
         <summary className="cursor-pointer text-sm font-semibold text-stone-800">
-          Profit check: {moneyRange(quote.profit.low, quote.profit.high)} ({Math.round(quote.margin.low)}–
-          {Math.round(quote.margin.high)}%)
+          You&apos;d keep about {moneyRange(quote.keep.low, quote.keep.high)}
         </summary>
         <ul className="mt-2 divide-y divide-stone-200 text-sm">
-          <CostRow
-            label={costs.dumpFeeMethod === "per_ton" ? "Dump fees (by weight)" : "Dump fees (by volume)"}
-            value={quote.cost.dump}
-          />
-          <CostRow
-            label={`Crew: ${costs.crewSize} × ${hoursText(quote.truckHours)} incl. drive & dump run`}
-            value={quote.cost.labor}
-          />
-          <CostRow label="Truck & fuel" value={quote.cost.vehicle} />
-          {quote.cost.disposal > 0 && <CostRow label="Item disposal fees" value={quote.cost.disposal} />}
-          <CostRow label={`Card fees (${costs.cardFeePct}%)`} value={quote.cost.cardFees} />
-          <CostRow label="Overhead" value={quote.cost.overhead} />
-          {quote.cost.marketing > 0 && <CostRow label="Marketing (paid lead)" value={quote.cost.marketing} />}
-          <li className="flex justify-between py-1.5 font-semibold">
-            <span>Your cost</span>
-            <span className="tabular-nums">{moneyRange(quote.cost.total.low, quote.cost.total.high)}</span>
-          </li>
-          <li className="flex justify-between py-1.5">
-            <span className="text-stone-700">Revenue per truck-hour</span>
-            <span className="tabular-nums">
-              {moneyRange(quote.revenuePerTruckHour.low, quote.revenuePerTruckHour.high)}
-            </span>
-          </li>
+          <CostRow label="Dump fees" value={costs.dump} />
+          <CostRow label="Gas" value={costs.gas} />
+          {settings.costs.helpers > 0 && (
+            <CostRow label={settings.costs.helpers === 1 ? "Your helper" : `${settings.costs.helpers} helpers`} value={costs.helpers} />
+          )}
         </ul>
-        <p className="mt-2 text-xs text-stone-500">
-          Based on the costs in My rates. Targets: {costs.targetMarginPct}% margin, {money(costs.targetRevenuePerTruckHour)} per
-          truck-hour.
-        </p>
+        <p className="mt-2 text-xs text-stone-500">Rough numbers from Your costs in My rates.</p>
       </details>
     </Card>
   );
 }
 
-const hoursText = (r: { low: number; high: number }) => {
-  const f = (n: number) => (Math.round(n * 10) / 10).toString();
-  return f(r.low) === f(r.high) ? `${f(r.low)} h` : `${f(r.low)}–${f(r.high)} h`;
-};
-
-function CostRow({ label, value }: { label: string; value: number | { low: number; high: number } }) {
-  const r = typeof value === "number" ? { low: value, high: value } : value;
+function CostRow({ label, value }: { label: string; value: { low: number; high: number } }) {
   return (
     <li className="flex justify-between gap-3 py-1.5">
       <span className="text-stone-700">{label}</span>
-      <span className="whitespace-nowrap tabular-nums">{moneyRange(r.low, r.high)}</span>
+      <span className="whitespace-nowrap tabular-nums">{moneyRange(value.low, value.high)}</span>
     </li>
   );
 }

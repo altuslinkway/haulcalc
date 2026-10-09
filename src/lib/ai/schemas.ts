@@ -22,13 +22,10 @@ export const PhotoAnalysisSchema = z.object({
         category: z.enum(CATEGORY_IDS).describe("The item type from the reference guide that best fits this line."),
         flat_rate_item_id: z
           .string()
-          .describe("Id from the owner's flat-rate or on-site list when this line is one of those items, otherwise an empty string."),
+          .describe("Id from the owner's flat-rate list when this line is one of those items, otherwise an empty string."),
       }),
     )
     .describe("Everything that will be hauled, one line per kind of item or pile."),
-  add_ons: z
-    .array(z.object({ item_id: z.string().describe("Id from the owner's add-on list."), quantity: z.number() }))
-    .describe("Add-on fees that apply, with counts."),
   scope: z
     .enum(["few_items", "single_area", "multi_area"])
     .describe("few_items: a handful of pieces. single_area: one room, garage or pile. multi_area: several rooms, a whole house, estate or hoarder cleanout."),
@@ -41,32 +38,31 @@ export const PhotoAnalysisSchema = z.object({
 
 export type PhotoAnalysis = z.infer<typeof PhotoAnalysisSchema>;
 
+const LoadPrice = (size: string) =>
+  z
+    .number()
+    .nullable()
+    .describe(`Price for ${size} trailer. If the card gives a range, use the top of it. Null if the card has no price for this size.`);
+
 export const RateCardSchema = z.object({
   business_name: z.string().nullable(),
-  load_tiers: z.array(
-    z.object({
-      label: z.string(),
-      fraction: z.number().describe("Share of a full trailer, e.g. 0.125 for 1/8, 1 for a full load."),
-      description: z.string(),
-      price_low: z.number(),
-      price_high: z.number(),
-    }),
-  ),
-  item_fees: z.array(
-    z.object({
-      name: z.string(),
-      pricing: z
-        .enum(["flat", "addon", "onsite"])
-        .describe("flat: the price covers removing the item by itself. addon: a fee on top of load pricing. onsite: quoted on site."),
-      price_low: z.number(),
-      price_high: z.number(),
-      cubic_yards_each: z.number().describe("Typical trailer space for one, in cubic yards."),
-      lbs_each: z.number().describe("Typical weight of one, in pounds."),
-      hint: z.string().describe("What counts as this item, for whoever matches photos to fees."),
-    }),
-  ),
+  quarter_load: LoadPrice("a 1/4"),
+  half_load: LoadPrice("a 1/2"),
+  three_quarter_load: LoadPrice("a 3/4"),
+  full_load: LoadPrice("a full"),
+  minimum_charge: z
+    .number()
+    .nullable()
+    .describe("The least any job costs (a minimum or single-item price). Null if the card doesn't say."),
+  items: z
+    .array(
+      z.object({
+        name: z.string().describe("Short, plain name, e.g. \"TV\" or \"Fridge or freezer\"."),
+        price: z.number().describe("Price for one. If the card gives a range, use the middle of it."),
+      }),
+    )
+    .describe("Items with their own set price (mattress, TV, fridge, hot tub). Leave out fees that depend on the job, like stairs or travel."),
   prohibited_items: z.array(z.string()),
-  minimum_charge: z.number().nullable(),
   notes: z.array(z.string()).describe("Anything else on the card that affects pricing but didn't fit above."),
 });
 
@@ -83,9 +79,7 @@ export const AnalyzeRequestSchema = z.object({
   photos: z.array(PhotoSchema).min(1).max(MAX_PHOTOS),
   customerNotes: z.string().max(4000).default(""),
   trailer: z.object({ name: z.string(), cubicYards: z.number() }),
-  itemFees: z.array(
-    z.object({ id: z.string(), name: z.string(), hint: z.string(), pricing: z.enum(["flat", "addon", "onsite"]) }),
-  ),
+  flatItems: z.array(z.object({ id: z.string(), name: z.string() })).max(100),
   prohibitedItems: z.array(z.string()),
 });
 

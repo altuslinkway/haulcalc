@@ -68,7 +68,7 @@ const steps = [
 const features = [
   {
     title: "Your rate card, imported",
-    text: "Snap a photo of your price sheet or trailer sign. Your load tiers, item fees and no-go list fill themselves in for you to check.",
+    text: "Snap a photo of your price sheet or trailer sign. Your four load prices, flat-rate items and no-go list fill themselves in for you to check.",
     icon: (
       <>
         <rect x="4" y="3" width="16" height="18" rx="2" />
@@ -78,7 +78,7 @@ const features = [
   },
   {
     title: "Flat rates, never double charged",
-    text: "Fridges, hot tubs and pianos get one flat price, and their space isn't billed again. Mattresses and freon are small add-ons.",
+    text: "Set your own: $50 for a TV, $170 for a fridge. They're charged on top of the load, and their space is never billed twice.",
     icon: (
       <>
         <rect x="6" y="3" width="12" height="18" rx="2" />
@@ -87,8 +87,8 @@ const features = [
     ),
   },
   {
-    title: "Profit before you quote",
-    text: "Dump fees, crew time, the drive and the dump run, card fees and overhead, added up on every job, with a warning when margin runs thin.",
+    title: "See what you keep",
+    text: "Dump fees, gas and helper pay come out of every quote, so you know what's yours before you send it.",
     icon: <path d="M4 19V5M4 19h16M8 15l4-4 3 3 5-6" />,
   },
   {
@@ -110,10 +110,9 @@ const features = [
 ];
 
 const breakdown = [
-  { label: "Load: 3/4 trailer", detail: "9.6–12.3 yd³ incl. +10% for unseen items", amount: "$460 – $580" },
-  { label: "Refrigerator", detail: "Appliance, flat rate", amount: "$120" },
-  { label: "Mattress / box spring ×2", detail: "$20 each", amount: "$40" },
-  { label: "Freon removal", detail: "$35 each", amount: "$35" },
+  { label: "3/4 load", detail: "8.6–10.4 yd³, with room for what the photos don't show", amount: "$490 – $575" },
+  { label: "Refrigerator", detail: "$170 each", amount: "$170" },
+  { label: "Mattress ×2", detail: "$60 each", amount: "$120" },
 ];
 
 const ratings = ["Much smaller", "Smaller", "About right", "Bigger", "Much bigger"];
@@ -121,7 +120,7 @@ const ratings = ["Much smaller", "Smaller", "About right", "Bigger", "Much bigge
 const faqs = [
   {
     q: "Does the AI decide my prices?",
-    a: "No. It only sizes up the job: what's there, how much space and how heavy. Your load tiers, item fees and costs set every price, the same way every time.",
+    a: "No. It only sizes up the job: what's there, how much space and how heavy. Your load prices, flat-rate items and extra charges set every price, the same way every time.",
   },
   {
     q: "What if the photos miss something?",
@@ -133,7 +132,7 @@ const faqs = [
   },
   {
     q: "I don't have a rate card. Can I still use it?",
-    a: "Yes. Switch to costs plus margin and HaulCalc prices from your dump fees, crew time, truck costs and the margin you want.",
+    a: "Yes. It starts with typical prices from independent haulers' published rates. Change any of them as you go.",
   },
   {
     q: "What gets shared when it learns?",
@@ -190,7 +189,7 @@ export default function HomePage() {
             </a>
           </div>
           <ul className="m-0 flex list-none flex-wrap gap-x-6 gap-y-2.5 p-0 text-[15px] font-medium text-stone-700">
-            {["Uses your rate card", "Shows your profit first", "Your customers need no app"].map((t) => (
+            {["Uses your rate card", "Shows what you keep", "Your customers need no app"].map((t) => (
               <li key={t} className="flex items-center gap-2">
                 <Check />
                 {t}
@@ -278,8 +277,8 @@ export default function HomePage() {
             <H2 id="features-title">The AI sizes the job. Your numbers set the price.</H2>
           </div>
           <p className="m-0 max-w-[26em] text-[17px] leading-relaxed text-stone-600">
-            The same job always prices the same way, because the math is yours: load tiers, item fees, dump rates, crew and truck
-            costs.
+            The same job always prices the same way, because the math is yours: four load prices, your flat-rate items, a
+            minimum and a few extras.
           </p>
         </div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4">
@@ -321,13 +320,12 @@ export default function HomePage() {
               ))}
               <div className="flex justify-between gap-4 border-t-2 border-stone-900 pt-4 pb-2 text-lg font-extrabold">
                 <span>Total</span>
-                <span className="tabular-nums">$655 – $775</span>
+                <span className="tabular-nums">$780 – $865</span>
               </div>
               <div className="mt-3 flex flex-wrap justify-between gap-3 rounded-2xl bg-stone-100 p-4">
                 {[
-                  ["Your cost", "$330 – $370"],
-                  ["Profit", "$325 – $405"],
-                  ["Per truck-hour", "$190 – $205"],
+                  ["Dump, gas and helper", "$150 – $170"],
+                  ["You keep", "$630 – $695"],
                 ].map(([label, value]) => (
                   <div key={label}>
                     <div className="text-[13px] text-stone-500">{label}</div>
@@ -350,7 +348,7 @@ export default function HomePage() {
               <div className="flex max-w-[88%] flex-col gap-2.5 self-end rounded-[20px_20px_6px_20px] bg-accent px-4 py-3.5 text-[15px] leading-normal text-stone-900">
                 <span>Hi Dana! This is [your business]. Thanks for sending the photos.</span>
                 <span>
-                  Based on what we can see (about 3/4 of our trailer), your price is $655–$775, including labor, loading, hauling and
+                  Based on what we can see (about a 3/4 load), your price is $780–$865, including labor, loading, hauling and
                   disposal.
                 </span>
                 <span>Heads up: we can&apos;t take the two paint cans, so please set those aside.</span>

@@ -4,12 +4,11 @@ import { useEffect, useState } from "react";
 import { sendFeedback } from "@/lib/client/feedback";
 import { deleteJob, recordOutcome, useJobs, type JobOutcome, type SavedJob } from "@/lib/client/jobsStore";
 import { saveSettings, useSettings } from "@/lib/client/settingsStore";
-import { formatFraction, parseFraction } from "@/lib/format";
 import type { JobRating, LearnedModel } from "@/lib/learning/learn";
 import { categoryById } from "@/lib/pricing/categories";
 import { calibrate, MIN_JOBS_FOR_CALIBRATION } from "@/lib/pricing/calibration";
 import type { Settings } from "@/lib/pricing/types";
-import { buttonClass, Card, money, moneyRange, NumberField } from "./ui";
+import { buttonClass, Card, money, moneyRange } from "./ui";
 
 const RATINGS: { value: JobRating; label: string }[] = [
   { value: "much_smaller", label: "Much smaller" },
@@ -37,8 +36,8 @@ export function JobsList() {
     <div className="space-y-4">
       <div>
         <h1 className="font-display text-[32px] leading-none font-bold tracking-[-0.015em]">Jobs</h1>
-        <p className="text-sm text-stone-500">
-          Quotes you&apos;ve sent. After each job, tap how it compared to the estimate. That&apos;s how the estimates get better.
+        <p className="mt-1 text-sm text-stone-500">
+          Quotes you&apos;ve sent. After each job, tap how it compared to the estimate. That&apos;s how estimates get better.
         </p>
       </div>
 
@@ -80,18 +79,13 @@ function YourAccuracy({ jobs, settings }: { jobs: SavedJob[]; settings: Settings
         dumpWeightLbs: j.outcome!.dumpWeightLbs,
       })),
   );
-  const current = settings.estimate.calibrationPct;
-  const setCalibration = (pct: number | null) =>
-    saveSettings({ ...settings, estimate: { ...settings.estimate, calibrationPct: pct } });
+  const current = settings.calibrationPct;
+  const setCalibration = (pct: number | null) => saveSettings({ ...settings, calibrationPct: pct });
+  if (own.jobs === 0 && current === null) return null;
 
   return (
     <Card title="Your estimates">
-      {own.jobs === 0 ? (
-        <p className="text-sm text-stone-600">
-          No finished jobs rated yet. After {MIN_JOBS_FOR_CALIBRATION} you&apos;ll see how close the photo estimates run for your
-          jobs.
-        </p>
-      ) : (
+      {own.jobs > 0 && (
         <div className="space-y-2 text-sm text-stone-700">
           <p>
             {own.jobs} finished job{own.jobs > 1 ? "s" : ""} rated.
@@ -101,12 +95,6 @@ function YourAccuracy({ jobs, settings }: { jobs: SavedJob[]; settings: Settings
                 ? " Your jobs have come in about as estimated."
                 : ` Your jobs have run about ${Math.abs(own.suggestedPct)}% ${own.suggestedPct > 0 ? "bigger" : "smaller"} than estimated.`}
           </p>
-          {own.lbsPerCubicYard !== null && (
-            <p>
-              Your dump tickets average about {own.lbsPerCubicYard} lbs per yd³ (your load price includes{" "}
-              {settings.charges.includedLbsPerCubicYard}).
-            </p>
-          )}
           {own.suggestedPct !== null && own.suggestedPct !== current && (
             <button type="button" className={`${buttonClass.primary} w-full`} onClick={() => setCalibration(own.suggestedPct)}>
               Use my own {own.suggestedPct > 0 ? "+" : ""}
@@ -116,7 +104,7 @@ function YourAccuracy({ jobs, settings }: { jobs: SavedJob[]; settings: Settings
         </div>
       )}
       {current !== null && (
-        <p className="mt-2 text-xs text-stone-500">
+        <p className={`text-xs text-stone-500 ${own.jobs > 0 ? "mt-2" : ""}`}>
           Applying your own {current > 0 ? "+" : ""}
           {current}% correction to new quotes.{" "}
           <button type="button" className="font-bold text-accent-deep" onClick={() => setCalibration(null)}>
@@ -139,18 +127,10 @@ function NetworkLearning({ settings }: { settings: Settings }) {
       .catch(() => setModel(null));
   }, []);
 
-  if (!model) return null;
-  if (!model.enabled) {
-    return (
-      <Card title="Learning from all owners">
-        <p className="text-sm text-stone-600">
-          Shared learning isn&apos;t switched on for this server yet. Your own job ratings still work above.
-        </p>
-      </Card>
-    );
-  }
+  const scopes = Object.entries(model?.scopeCalibration ?? {});
+  // Nothing to show until there's something learned.
+  if (!model?.enabled || (model.items.length === 0 && scopes.length === 0)) return null;
 
-  const scopes = Object.entries(model.scopeCalibration);
   // Small differences are noise; the prompt skips them too.
   const corrected = model.items.filter((i) => Math.abs(i.biasPct) >= 5);
   const confirmed = model.items.length - corrected.length;
@@ -160,60 +140,54 @@ function NetworkLearning({ settings }: { settings: Settings }) {
       title="Learning from all owners"
       subtitle={`${plural(model.jobs, "quote")} from ${plural(model.owners, "owner")} so far.`}
     >
-      {model.items.length === 0 && scopes.length === 0 ? (
-        <p className="text-sm text-stone-600">
-          Nothing learned yet. Corrections start counting once several different owners agree on them.
-        </p>
-      ) : (
-        <div className="space-y-3 text-sm text-stone-700">
-          {model.items.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold tracking-wide text-stone-500 uppercase">Item sizes owners corrected</p>
-              {corrected.length > 0 ? (
-                <ul className="mt-1 divide-y divide-stone-100">
-                  {corrected.slice(0, 8).map((i) => (
-                    <li key={i.category} className="flex justify-between gap-3 py-1.5">
-                      <span>{categoryById(i.category).label}</span>
-                      <span className="text-right text-stone-500 tabular-nums">
-                        {i.perUnitCubicYards !== null && `${i.perUnitCubicYards} yd³ each, `}
-                        AI was {Math.abs(i.biasPct)}% {i.biasPct > 0 ? "low" : "high"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-1">No consistent corrections yet.</p>
-              )}
-              {confirmed > 0 && (
-                <p className="mt-1 text-xs text-stone-500">
-                  {confirmed} other item type{confirmed > 1 ? "s" : ""} confirmed about right.
-                </p>
-              )}
-            </div>
-          )}
-          {scopes.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold tracking-wide text-stone-500 uppercase">Whole-job correction</p>
+      <div className="space-y-3 text-sm text-stone-700">
+        {model.items.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold tracking-wide text-stone-500 uppercase">Item sizes owners corrected</p>
+            {corrected.length > 0 ? (
               <ul className="mt-1 divide-y divide-stone-100">
-                {scopes.map(([scope, c]) => (
-                  <li key={scope} className="flex justify-between gap-3 py-1.5">
-                    <span>{scopeLabel[scope as keyof typeof scopeLabel]}</span>
-                    <span className="text-stone-500 tabular-nums">
-                      {c!.pct > 0 ? "+" : ""}
-                      {c!.pct}% from {c!.owners} owners
+                {corrected.slice(0, 8).map((i) => (
+                  <li key={i.category} className="flex justify-between gap-3 py-1.5">
+                    <span>{categoryById(i.category).label}</span>
+                    <span className="text-right text-stone-500 tabular-nums">
+                      {i.perUnitCubicYards !== null && `${i.perUnitCubicYards} yd³ each, `}
+                      AI was {Math.abs(i.biasPct)}% {i.biasPct > 0 ? "low" : "high"}
                     </span>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
-          <p className="text-xs text-stone-500">
-            {settings.learning.useNetwork
-              ? "New quotes use these automatically. Item sizes go into the AI's instructions; whole-job corrections adjust the range."
-              : "You've turned this off in My rates, so your quotes don't use it."}
-          </p>
-        </div>
-      )}
+            ) : (
+              <p className="mt-1">No consistent corrections yet.</p>
+            )}
+            {confirmed > 0 && (
+              <p className="mt-1 text-xs text-stone-500">
+                {confirmed} other item type{confirmed > 1 ? "s" : ""} confirmed about right.
+              </p>
+            )}
+          </div>
+        )}
+        {scopes.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold tracking-wide text-stone-500 uppercase">Whole-job correction</p>
+            <ul className="mt-1 divide-y divide-stone-100">
+              {scopes.map(([scope, c]) => (
+                <li key={scope} className="flex justify-between gap-3 py-1.5">
+                  <span>{scopeLabel[scope as keyof typeof scopeLabel]}</span>
+                  <span className="text-stone-500 tabular-nums">
+                    {c!.pct > 0 ? "+" : ""}
+                    {c!.pct}% from {c!.owners} owners
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <p className="text-xs text-stone-500">
+          {settings.learning.useNetwork
+            ? "New quotes use these automatically. Item sizes go into the AI's instructions; whole-job corrections adjust the range."
+            : "You've turned this off in My rates, so your quotes don't use it."}
+        </p>
+      </div>
     </Card>
   );
 }
@@ -261,69 +235,17 @@ function JobRow({ job }: { job: SavedJob }) {
         ))}
       </div>
 
-      <details className="group mt-2">
-        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-bold text-accent-deep">More detail: exact size, price, dump ticket</summary>
-        <OutcomeForm job={job} />
-      </details>
-    </li>
-  );
-}
-
-function OutcomeForm({ job }: { job: SavedJob }) {
-  const [draft, setDraft] = useState<JobOutcome>(
-    job.outcome ?? { won: true, rating: null, actualCubicYards: null, finalPrice: null, dumpWeightLbs: null },
-  );
-  const capacity = job.trailerCubicYards || 1;
-  const set = (patch: Partial<JobOutcome>) => setDraft((d) => ({ ...d, ...patch }));
-
-  return (
-    <div className="space-y-3 pt-2">
-      <p className="text-xs text-stone-500">
-        The AI estimated {formatFraction(job.aiCubicYards / capacity)} of a trailer ({Math.round(job.aiCubicYards * 10) / 10} yd³)
-        {Math.abs(job.quotedCubicYards - job.aiCubicYards) > 0.05 &&
-          `; you quoted on ${Math.round(job.quotedCubicYards * 10) / 10} yd³`}
-        .
-      </p>
-      <div className="grid grid-cols-2 gap-3">
-        <NumberField
-          label="Actual load"
-          value={(draft.actualCubicYards ?? 0) / capacity}
-          format={(f) => (f > 0 ? formatFraction(f) : "")}
-          parse={parseFraction}
-          inputMode="text"
-          onChange={(f) => set({ actualCubicYards: Math.round(f * capacity * 100) / 100 })}
-          hint="Share of the trailer: 1/4, 3/8, 60%"
-        />
-        <NumberField
-          label="Final price"
-          prefix="$"
-          value={draft.finalPrice ?? 0}
-          format={(n) => (n > 0 ? String(n) : "")}
-          onChange={(finalPrice) => set({ finalPrice })}
-        />
-        <NumberField
-          label="Dump ticket weight"
-          suffix="lbs"
-          value={draft.dumpWeightLbs ?? 0}
-          format={(n) => (n > 0 ? String(n) : "")}
-          onChange={(dumpWeightLbs) => set({ dumpWeightLbs })}
-          hint="Optional"
-        />
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        <button type="button" className={buttonClass.primary} onClick={() => logOutcome(job, { ...draft, won: true })}>
-          Save
-        </button>
+      <div className="mt-1 flex justify-between">
         <button
           type="button"
-          className={buttonClass.secondary}
+          className="min-h-11 text-sm font-bold text-stone-600"
           onClick={() => logOutcome(job, { won: false, rating: null, actualCubicYards: null, finalPrice: null, dumpWeightLbs: null })}
         >
           Didn&apos;t book
         </button>
         <button
           type="button"
-          className={buttonClass.secondary}
+          className="min-h-11 text-sm font-bold text-stone-500"
           onClick={() => {
             if (window.confirm("Delete this job?")) deleteJob(job.id);
           }}
@@ -331,7 +253,7 @@ function OutcomeForm({ job }: { job: SavedJob }) {
           Delete
         </button>
       </div>
-    </div>
+    </li>
   );
 }
 

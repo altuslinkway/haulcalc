@@ -1,5 +1,6 @@
 import type { RateCard } from "@/lib/ai/schemas";
-import type { ItemFee, LoadTier, Settings } from "./types";
+import { DEFAULT_SETTINGS } from "./defaults";
+import type { FlatItem, Settings } from "./types";
 
 export function slugify(text: string): string {
   return (
@@ -11,7 +12,7 @@ export function slugify(text: string): string {
 }
 
 /** Ids that are unique within a list, derived from names so they stay readable. */
-function uniqueIds(names: string[]): string[] {
+export function uniqueIds(names: string[]): string[] {
   const seen = new Map<string, number>();
   return names.map((name) => {
     const base = slugify(name);
@@ -21,51 +22,53 @@ function uniqueIds(names: string[]): string[] {
   });
 }
 
+type LoadSize = keyof Settings["loadPrices"];
+const SIZES: LoadSize[] = ["quarter", "half", "threeQuarter", "full"];
+const roundTo5 = (n: number) => Math.round(n / 5) * 5;
+
+/**
+ * Fill in load sizes a card doesn't list (some only price a half and a full),
+ * keeping the usual shape: smaller loads cost more per yard.
+ */
+function completeLoadPrices(found: Partial<Record<LoadSize, number>>, current: Settings["loadPrices"]) {
+  const known = SIZES.filter((s) => (found[s] ?? 0) > 0);
+  if (known.length === 0) return current;
+  const shape = DEFAULT_SETTINGS.loadPrices;
+  const full = known.reduce((sum, s) => sum + (found[s]! / shape[s]) * shape.full, 0) / known.length;
+  return Object.fromEntries(
+    SIZES.map((s) => [s, (found[s] ?? 0) > 0 ? Math.round(found[s]!) : roundTo5((full * shape[s]) / shape.full)]),
+  ) as Settings["loadPrices"];
+}
+
 /**
  * Replace the parts of the owner's settings that a rate card covers. Costs
- * (dump fees, wages, etc) never appear on a card, so they're left alone, and
- * an item's disposal cost carries over when the same item is on the new card.
+ * and extras never appear on a card, so they're left alone.
  */
 export function applyRateCard(settings: Settings, card: RateCard): Settings {
   const next: Settings = structuredClone(settings);
 
-  if (card.load_tiers.length > 0) {
-    const tiers = [...card.load_tiers].sort((a, b) => a.fraction - b.fraction);
-    const ids = uniqueIds(tiers.map((t) => t.label));
-    next.loadTiers = tiers.map(
-      (t, i): LoadTier => ({
-        id: ids[i],
-        label: t.label,
-        fraction: t.fraction,
-        description: t.description,
-        priceLow: Math.min(t.price_low, t.price_high),
-        priceHigh: Math.max(t.price_low, t.price_high),
-      }),
-    );
-  }
+  next.loadPrices = completeLoadPrices(
+    {
+      quarter: card.quarter_load ?? undefined,
+      half: card.half_load ?? undefined,
+      threeQuarter: card.three_quarter_load ?? undefined,
+      full: card.full_load ?? undefined,
+    },
+    settings.loadPrices,
+  );
 
-  if (card.item_fees.length > 0) {
-    const ids = uniqueIds(card.item_fees.map((f) => f.name));
-    next.itemFees = card.item_fees.map((f, i): ItemFee => {
-      const existing = settings.itemFees.find(
-        (e) => e.id === ids[i] || e.name.toLowerCase() === f.name.toLowerCase(),
-      );
-      return {
-        id: ids[i],
-        name: f.name,
-        pricing: f.pricing,
-        priceLow: Math.min(f.price_low, f.price_high),
-        priceHigh: Math.max(f.price_low, f.price_high),
-        disposalCost: existing?.disposalCost ?? 0,
-        cubicYardsEach: Math.max(0, f.cubic_yards_each),
-        lbsEach: Math.max(0, f.lbs_each),
-        hint: f.hint,
-      };
-    });
+  if (card.minimum_charge != null && card.minimum_charge > 0) {
+    next.minimumCharge = Math.round(card.minimum_charge);
+  }
+  next.minimumCharge = Math.min(next.minimumCharge, next.loadPrices.quarter);
+
+  const items = card.items.filter((i) => i.name.trim() && i.price > 0);
+  if (items.length > 0) {
+    const ids = uniqueIds(items.map((i) => i.name));
+    next.flatItems = items.map((i, n): FlatItem => ({ id: ids[n], name: i.name.trim(), price: Math.round(i.price) }));
   }
 
   if (card.prohibited_items.length > 0) next.prohibitedItems = [...card.prohibited_items];
-  if (card.minimum_charge != null) next.charges.minimumCharge = card.minimum_charge;
   if (card.business_name && !settings.businessName.trim()) next.businessName = card.business_name;
 
   return next;

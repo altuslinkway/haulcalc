@@ -1,4 +1,3 @@
-import { specialItem } from "./engine";
 import type { JobDetails, JobEstimate, Quote, Settings } from "./types";
 
 export type QuoteStyle = "range" | "single";
@@ -20,7 +19,8 @@ export function buildQuoteMessage(
   const single = style === "single" || quote.total.low === quote.total.high;
   const priceText = single ? money(price ?? quote.suggested) : `${money(quote.total.low)}–${money(quote.total.high)}`;
 
-  const size = quote.volume.tierLabel ? ` (about ${quote.volume.tierLabel.toLowerCase()} of our trailer)` : "";
+  const label = quote.volume.sizeLabel.toLowerCase();
+  const size = label ? ` (about ${label.endsWith("loads") ? "" : "a "}${label})` : "";
   const parts = [
     `${greeting}${from} Thanks for sending the photos.`,
     `Based on what we can see${size}, your price is ${priceText}, including labor, loading, hauling and disposal.`,
@@ -29,13 +29,6 @@ export function buildQuoteMessage(
   const prohibited = estimate.prohibitedItems.map((p) => midSentence(p.name));
   if (prohibited.length > 0) {
     parts.push(`Heads up: we can't take ${joinList(prohibited)}, so please set those aside.`);
-  }
-
-  const onSite = estimate.lines
-    .filter((l) => specialItem(l, settings)?.pricing === "onsite")
-    .map((l) => midSentence(l.description));
-  if (onSite.length > 0) {
-    parts.push(`The ${joinList(onSite)} will be priced on site.`);
   }
 
   if (estimate.questionsForCustomer.length > 0) {

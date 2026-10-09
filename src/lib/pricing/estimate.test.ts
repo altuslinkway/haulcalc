@@ -1,16 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "./defaults";
-import {
-  addLine,
-  customLine,
-  lineForCategory,
-  lineForItem,
-  loadCubicYards,
-  scaleLoadTo,
-  setAddOn,
-  setLinePricing,
-  setLineQuantity,
-} from "./estimate";
+import { addLine, lineForCategory, lineForItem, loadCubicYards, scaleLoadTo, setLineItem, setLineQuantity } from "./estimate";
 import type { JobEstimate } from "./types";
 
 const base: JobEstimate = {
@@ -18,9 +8,8 @@ const base: JobEstimate = {
   lines: [
     { id: "boxes", description: "Boxes", quantity: 10, cubicYards: 1, weightLbs: 200, material: "household", category: "boxes", itemId: null },
     { id: "sofa", description: "Sofa", quantity: 1, cubicYards: 2, weightLbs: 150, material: "household", category: "sofa", itemId: null },
-    { id: "fridge", description: "Fridge", quantity: 1, cubicYards: 1.5, weightLbs: 250, material: "household", category: "refrigerator", itemId: "appliance" },
+    { id: "fridge", description: "Fridge", quantity: 1, cubicYards: 1.5, weightLbs: 250, material: "household", category: "refrigerator", itemId: "fridge" },
   ],
-  addOns: [],
   scope: "single_area",
   prohibitedItems: [],
   stairsFlights: 0,
@@ -30,22 +19,18 @@ const base: JobEstimate = {
   networkCalibrationPct: 0,
 };
 
+const item = (id: string) => DEFAULT_SETTINGS.flatItems.find((i) => i.id === id)!;
+
 describe("estimate edits", () => {
   it("keeps per-unit size and weight when the count changes", () => {
     const e = setLineQuantity(base, "boxes", 15);
     expect(e.lines[0]).toMatchObject({ quantity: 15, cubicYards: 1.5, weightLbs: 300 });
   });
 
-  it("counts only load-priced lines toward the load", () => {
+  it("counts only lines charged by the load toward the load", () => {
     expect(loadCubicYards(base, DEFAULT_SETTINGS)).toBe(3);
-    expect(loadCubicYards(setLinePricing(base, "fridge", null), DEFAULT_SETTINGS)).toBe(4.5);
-    expect(loadCubicYards(setLinePricing(base, "sofa", "appliance"), DEFAULT_SETTINGS)).toBe(1);
-  });
-
-  it("treats a line as load-priced if its item became an add-on", () => {
-    const settings = structuredClone(DEFAULT_SETTINGS);
-    settings.itemFees.find((f) => f.id === "appliance")!.pricing = "addon";
-    expect(loadCubicYards(base, settings)).toBe(4.5);
+    expect(loadCubicYards(setLineItem(base, "fridge", null), DEFAULT_SETTINGS)).toBe(4.5);
+    expect(loadCubicYards(setLineItem(base, "sofa", "couch"), DEFAULT_SETTINGS)).toBe(1);
   });
 
   it("resizes the load without touching flat-rate items", () => {
@@ -58,25 +43,23 @@ describe("estimate edits", () => {
     const onlyFridge = { ...base, lines: [base.lines[2]] };
     const e = scaleLoadTo(onlyFridge, DEFAULT_SETTINGS, 3.6);
     expect(loadCubicYards(e, DEFAULT_SETTINGS)).toBe(3.6);
+    expect(e.lines[1]).toMatchObject({ description: "Mixed junk", category: "mixed_pile", weightLbs: 720 });
   });
 
-  it("builds new lines from the owner's items or by hand", () => {
-    const tub = lineForItem(DEFAULT_SETTINGS.itemFees.find((f) => f.id === "hot-tub")!);
-    expect(tub).toMatchObject({ itemId: "hot-tub", cubicYards: 6, weightLbs: 700 });
-    const dirt = customLine("Dirt", 2, "dense");
-    expect(dirt).toMatchObject({ itemId: null, weightLbs: 4000 });
-    expect(addLine(base, dirt).lines).toHaveLength(4);
+  it("sizes a flat-rate item from its name", () => {
+    expect(lineForItem(item("hot-tub"))).toMatchObject({ itemId: "hot-tub", category: "hot_tub", cubicYards: 7, weightLbs: 700 });
+    expect(lineForItem(item("couch"))).toMatchObject({ description: "Couch", category: "sofa" });
+    expect(lineForItem({ id: "batteries", name: "Car batteries", price: 50 })).toMatchObject({
+      category: "other",
+      cubicYards: 0.25,
+      weightLbs: 30,
+    });
+    expect(addLine(base, lineForItem(item("tv"))).lines).toHaveLength(4);
   });
 
   it("sizes a new line from its item type", () => {
     expect(lineForCategory("sectional")).toMatchObject({ category: "sectional", cubicYards: 3.5, weightLbs: 250 });
     expect(lineForCategory("sectional", 4.2).cubicYards).toBe(4.2);
     expect(lineForCategory("dense", 2)).toMatchObject({ material: "dense", weightLbs: 4000 });
-  });
-
-  it("sets and clears add-on counts", () => {
-    const e = setAddOn(base, "mattress", 2);
-    expect(e.addOns).toEqual([{ itemId: "mattress", quantity: 2 }]);
-    expect(setAddOn(e, "mattress", 0).addOns).toEqual([]);
   });
 });

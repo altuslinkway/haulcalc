@@ -35,11 +35,7 @@ Reference weights (pounds per cubic yard):
 - Concrete, brick, dirt, rock, tile: 2,000–2,700
 - Single items: refrigerator 250 · washer 170 · dryer 120 · sofa 100–200 · mattress 60–120
 
-The owner's items come in three kinds:
-- Flat-rate items have one price that covers them, so they are not charged by trailer space. When a line is one of these, set its flat_rate_item_id. Keep one line per item type (for example "Refrigerator", quantity 2). Still give its space and weight.
-- On-site items are quoted in person. Set flat_rate_item_id for those lines too.
-- Add-ons are small fees for items that still ride in the load, like mattresses or freon. List them in add_ons with counts, and keep the items themselves in the lines.
-Use only the ids given. If an item could match two entries, pick the more specific one, and follow each entry's hint.
+Flat-rate items: the owner charges a set price for some items (a TV, a fridge, a hot tub), whatever the load. When a line is one of these, set its flat_rate_item_id to that item's id, keep one line per item type (for example "Refrigerator", quantity 2), and still give its space and weight. Use only the ids given; leave flat_rate_item_id empty for everything else, which is charged by trailer space. If an item could match two entries, pick the more specific one.
 
 Prohibited items: the owner can't take certain things. Flag anything that looks like it falls under their list, such as paint cans, propane or helium tanks, gas cans, chemicals, pesticides, motor oil, car batteries or food waste. Name it specifically, the way you'd say it to the customer ("two gallon paint cans").
 
@@ -72,26 +68,15 @@ ${lines.join("\n")}
 }
 
 export function photoAnalysisInstructions(req: AnalyzeRequest, learned?: LearnedModel): string {
-  const list = (kind: "flat" | "addon" | "onsite") => {
-    const fees = req.itemFees.filter((f) => f.pricing === kind);
-    return fees.length ? fees.map((f) => `- ${f.id}: ${f.name}${f.hint ? ` — ${f.hint}` : ""}`).join("\n") : "(none)";
-  };
+  const flat = req.flatItems.length ? req.flatItems.map((i) => `- ${i.id}: ${i.name}`).join("\n") : "(none)";
   const prohibited = req.prohibitedItems.length ? req.prohibitedItems.map((p) => `- ${p}`).join("\n") : "(none)";
   const notes = req.customerNotes.trim() || "(none)";
 
   return `${learnedGuidance(learned)}The owner hauls with a ${req.trailer.name} that holds ${req.trailer.cubicYards} cubic yards.
 
 <flat_rate_items>
-${list("flat")}
+${flat}
 </flat_rate_items>
-
-<on_site_items>
-${list("onsite")}
-</on_site_items>
-
-<add_ons>
-${list("addon")}
-</add_ons>
 
 <prohibited_items>
 ${prohibited}
@@ -104,12 +89,10 @@ ${notes}
 Estimate the job in the ${req.photos.length} photo${req.photos.length > 1 ? "s" : ""} above. The customer notes are what the customer or owner said about the job; use them alongside the photos, and trust the photos if they conflict.`;
 }
 
-export const RATE_CARD_SYSTEM = `You read junk removal rate cards (photos or screenshots of price sheets, trailer signs, flyers, web pages) and turn them into structured pricing settings.
+export const RATE_CARD_SYSTEM = `You read junk removal rate cards (photos or screenshots of price sheets, trailer signs, flyers, web pages) and turn them into a simple price list: four load prices, a minimum, and items with their own price.
 
-- Load tiers: one per volume level, with the share of a full trailer as a number (1/8 → 0.125, 1/4 → 0.25, 1/2 → 0.5, 3/4 → 0.75, full → 1). A single price becomes the same low and high. Order them smallest to largest.
-- Item fees: one per extra charge. When a fee has an add-on (for example "$120 plus $50 freon removal"), make the add-on its own entry and say in its hint which items it applies to.
-- Pricing kind for each item fee: "flat" when the price looks like it covers removing that item by itself (appliances, hot tubs, pianos, safes); "addon" when it's a disposal surcharge on top of load pricing (mattress fees, freon, tires, TVs); "onsite" for "on-site quote" or "call for price" entries, with prices of 0.
-- Give each item's typical trailer space and weight. A fridge is about 1.5 cubic yards and 250 lbs; a mattress 0.75 and 80; a hot tub 6 and 700; an upright piano 3 and 600.
-- Write a short hint for each item fee describing what counts as that item, so someone matching customer photos to fees gets it right.
+- Load prices: the price for a 1/4, 1/2, 3/4 and full trailer or truck. Cards name these many ways ("quarter load", "1/2 truck", "8 yards" out of 16). When a card gives a range for a size, use the top of the range. Leave a size null when the card has no price for it; don't guess. A card with more sizes (1/8, 5/8) only needs the four that match.
+- Minimum charge: the least any job costs, often called a minimum, a single-item price or a 1/8 load. Null if the card doesn't say.
+- Items: things with their own set price, like a mattress, TV, couch, fridge, hot tub or piano. Use a short plain name ("TV", "Fridge or freezer"). When a price is a range, use the middle. Leave out fees that depend on the job (stairs, travel, labor per hour) and "call for price" items. Combine an item and its surcharge into one price ("$120 plus $50 freon" is 170).
 - Prohibited items: copy the list as written.
-- Only use what the card says. Leave minimum_charge and business_name null when the card doesn't state them, and put anything else that affects price (weight limits, travel fees, disclaimers) in notes.`;
+- Only use what the card says. Leave business_name null when it isn't shown, and put anything else that affects price (weight limits, travel fees, disclaimers) in notes.`;

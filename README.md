@@ -4,21 +4,16 @@ Quote junk removal jobs from customer photos in seconds. Built for independent h
 
 ## How it works
 
-1. **Ask for the right photos.** The quote screen has a ready-made text asking the customer for wide shots with something for scale, close-ups of heavy or fee items, the path to the truck, and your standard questions (other rooms, stairs, parking, what's in the boxes).
-2. **The AI lists the job; it doesn't set the price.** Claude looks at the photos and returns one line per item or pile: how many, how much trailer space, how heavy, and what material (household, construction, yard, or concrete/dirt). It tags items on your flat-rate list, counts add-on items, flags anything you won't take, and suggests questions for the customer.
-3. **You fix and move things around.** Every line can be edited, deleted, or added to. Each item can also be switched between **by the load** and a **flat rate**. The "It's really about…" buttons resize the load in one tap.
-4. **Your rates set the price.** Plain code (`src/lib/pricing/engine.ts`) prices it:
-   - **Load price** from your rate card. Tiers are read as a curve, so a 3/8 load lands between the 1/4 and 1/2 prices. Small loads cost more per yard because the trip costs the same.
-   - **Flat-rate items** (fridge/appliance, hot tub, piano, safe) are charged their own price and don't count toward the load price. **Add-ons** (mattress, freon, TVs, tires, propane) are small fees on top.
-   - **Range from photos.** It spreads around what's visible by AI confidence, adds a cushion on the high end for unseen items (more for multi-room or unclear jobs), and applies a correction learned from your past jobs.
-   - **Travel** past your free radius, **stairs** per flight (doubled for big loads), **long carry**, and a **heavy-material** charge when weight is over what the load includes. The heavy rate is never less than twice your dump rate.
-   - **Job options:** same-day, after-hours, packed rooms. Then the **minimum charge**, rounded to $5.
-5. **Profit check.** Your real costs for the same job are added up and shown as profit, margin, and **revenue per truck-hour**:
-   - dump fees by weight and material, with a per-trip minimum
-   - trips set by space *or* payload, whichever needs more
-   - crew time door to door, including the dump run, plus payroll taxes
-   - truck cost per mile, disposal fees, card fees, overhead, and marketing when the job came from a paid lead
-   - a **shared dump run** option that splits dump time across small jobs
+1. **Ask for the right photos.** The quote screen has a ready-made text asking the customer for wide shots with something for scale, close-ups of heavy items, the path to the truck, and your standard questions (other rooms, stairs, parking, what's in the boxes).
+2. **The AI lists the job; it doesn't set the price.** Claude looks at the photos and returns one line per item or pile: how many, how much trailer space, and how heavy. It tags items on your flat-rate list, flags anything you won't take, and suggests questions for the customer.
+3. **You fix it in a tap.** The 1/4, 1/2, 3/4 and Full buttons resize the load. Any item can be removed, recounted, or switched between the load and a flat-rate item.
+4. **Your rates set the price.** Plain code (`src/lib/pricing/engine.ts`) prices it from a few numbers:
+   - **Four load prices** (1/4, 1/2, 3/4, full trailer). Sizes in between are priced in between, starting from your **minimum charge**, so a 3/8 load lands halfway between the 1/4 and 1/2 prices. Bigger than one trailer is full loads plus the rest.
+   - **Flat-rate items**, as many as you like ($50 for a TV, $170 for a fridge). Charged their price on top of the load; their space counts toward trips but is never billed twice.
+   - **Extras:** travel past your free miles, stairs per flight, and a per-ton charge for loads heavier than normal junk (concrete, dirt, shingles), never less than twice your dump fee.
+   - **A range, not a guess.** It spreads around what's visible by how sure the AI is, leaves 10% room for what the photos don't show (20% for multi-room jobs or unclear photos), and applies any learned correction. The owner doesn't set any of this.
+   - Never below the **minimum charge**; otherwise rounded to $5.
+5. **What you'd keep.** Dump fees by weight, gas for the drive and dump run, and helper pay come out of the price, with a heads-up when costs eat most of it.
 6. **Send it.** Copy, share, or text the quote, and it's saved under **Jobs**.
 7. **It gets smarter with every job** (see below).
 
@@ -27,7 +22,7 @@ Quote junk removal jobs from customer photos in seconds. Built for independent h
 The AI model itself isn't retrained. What improves is what HaulCalc tells it and how HaulCalc corrects its numbers, using feedback from every owner:
 
 - **Corrections when quoting.** Every line the AI returns is tagged with an item type from a fixed list (`src/lib/pricing/categories.ts`). When an owner changes a size and sends the quote, the AI's guess and the owner's number are recorded side by side.
-- **One tap after the job.** On the Jobs page, each sent quote asks "How did the job compare to the estimate?" (much smaller … much bigger). Exact load size and dump-ticket weight are optional.
+- **One tap after the job.** On the Jobs page, each sent quote asks "How did the job compare to the estimate?" (much smaller … much bigger).
 - **Pooling across owners** (`src/lib/learning/`). Feedback goes to a shared Postgres table. It's aggregated as the median of each owner's median, so one careless or malicious account can't drag the numbers. Nothing is used until at least 3 different owners agree. Each owner's vote uses their latest jobs, so corrections keep up as the AI's guesses improve. Ratings are read against the quote the owner actually saw, so an applied correction doesn't undo itself.
 - **Feeding it back:**
   - Learned item sizes (e.g. "sectional: about 4.2 yd³ each, confirmed by 9 owners") are added to the AI's instructions on every quote.
@@ -37,7 +32,7 @@ The AI model itself isn't retrained. What improves is what HaulCalc tells it and
 
 To turn shared learning on, set `DATABASE_URL` to any Postgres database (on Vercel: Storage → create a Postgres/Neon database, and it sets the variable for you). The table is created automatically. Without it, everything still works and learning stays on each device.
 
-Defaults come from market research on US independents. See [`reports/Junk removal cost drivers.md`](reports/Junk%20removal%20cost%20drivers.md), with the underlying notes in `research_notes/`. Everything is editable under **My rates**: owners can type their numbers, reorder items, change how each item is charged, or **upload a photo of their rate card** to fill it in.
+Defaults come from market research on US independents. See [`reports/Junk removal cost drivers.md`](reports/Junk%20removal%20cost%20drivers.md), with the underlying notes in `research_notes/`. Everything is editable under **My rates**: owners type in their four load prices, minimum and flat-rate items, or **upload a photo of their rate card** to fill them in. Sizes a card doesn't list are filled in from the ones it does.
 
 ## Running it
 
@@ -80,5 +75,6 @@ The AI model defaults to Claude Opus 5.5 at medium effort (`HAULCALC_MODEL`, `HA
 - **No login yet.** Anyone with the site's link can run photo analyses on your API key and send feedback. The one-vote-per-device math limits how much a bad actor can skew learning, but accounts are the real fix before opening it up widely.
 - **Photos aren't kept**, so learning works from numbers only. Storing photos (with owner consent) would allow showing the AI similar past jobs as examples, and an accuracy test set for every prompt change.
 - **Customer upload link.** Let customers upload photos directly from a link the owner texts them, instead of forwarding pictures.
-- **Unmeasured defaults:** dump-run time, loading time per ton of heavy material, and hours to load a full trailer are placeholders until owners' logged jobs calibrate them.
+- **Earnings tracking.** Log finished jobs and see what you made each month (next up).
+- **Fixed behind the scenes:** the range spread, the room left for unseen items, loading time per trailer and dump-run time are set in `engine.ts` from the research, so owners don't have to think about them. Owners' logged jobs could tune them later.
 - Deploying to Vercel works out of the box. Photos are shrunk on the phone before upload to stay under request size limits.

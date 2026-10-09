@@ -64,3 +64,32 @@ export function categoryById(id: string): ItemCategory {
 }
 
 export const isCategoryId = (id: string): id is ItemCategoryId => ITEM_CATEGORIES.some((c) => c.id === id);
+
+// Words owners use for their flat-rate items, so a hand-added "Couch" line
+// takes up a couch's space in the trailer.
+const NAME_HINTS: [RegExp, ItemCategoryId][] = [
+  [/sectional/i, "sectional"],
+  [/couch|sofa|futon/i, "sofa"],
+  [/loveseat/i, "loveseat"],
+  [/recliner|arm ?chair/i, "armchair"],
+  [/mattress|box ?spring/i, "mattress"],
+  [/fridge|refrigerator|freezer/i, "refrigerator"],
+  [/washer|dryer|appliance/i, "washer_dryer"],
+  [/stove|oven|range/i, "stove"],
+  [/dishwasher/i, "dishwasher"],
+  [/water heater/i, "water_heater"],
+  [/\btvs?\b|television|monitor/i, "tv"],
+  [/treadmill|elliptical|exercise|gym/i, "exercise"],
+  [/piano/i, "piano"],
+  [/hot ?tub|spa\b|jacuzzi/i, "hot_tub"],
+  [/grill|patio/i, "grill_patio"],
+  [/carpet|rug/i, "carpet"],
+  [/dresser|chest/i, "dresser"],
+  [/desk/i, "desk"],
+  [/table/i, "table"],
+];
+
+/** The item type a name most likely refers to, or "other". */
+export function guessCategory(name: string): ItemCategoryId {
+  return NAME_HINTS.find(([re]) => re.test(name))?.[1] ?? "other";
+}

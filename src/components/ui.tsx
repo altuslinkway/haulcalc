@@ -34,11 +34,22 @@ export function Card({
 const inputClass =
   "w-full min-w-0 rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-base text-stone-900 placeholder:text-stone-500 focus:border-stone-900 focus:outline-none focus:ring-2 focus:ring-accent/40";
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: (id: string) => ReactNode }) {
+export function Field({
+  label,
+  hint,
+  hideLabel = false,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  /** Still read out by screen readers, for rows under a shared heading. */
+  hideLabel?: boolean;
+  children: (id: string) => ReactNode;
+}) {
   const id = useId();
   return (
     <div className="min-w-0">
-      <label htmlFor={id} className="mb-1 block text-sm font-medium text-stone-700">
+      <label htmlFor={id} className={hideLabel ? "sr-only" : "mb-1 block text-sm font-medium text-stone-700"}>
         {label}
       </label>
       {children(id)}
@@ -50,18 +61,20 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 export function TextField({
   label,
   hint,
+  hideLabel,
   value,
   onChange,
   placeholder,
 }: {
   label: string;
   hint?: string;
+  hideLabel?: boolean;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
 }) {
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label} hint={hint} hideLabel={hideLabel}>
       {(id) => (
         <input id={id} className={inputClass} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
       )}
@@ -107,6 +120,7 @@ export function TextArea({
 export function NumberField({
   label,
   hint,
+  hideLabel,
   value,
   onChange,
   prefix,
@@ -117,6 +131,7 @@ export function NumberField({
 }: {
   label: string;
   hint?: string;
+  hideLabel?: boolean;
   value: number;
   onChange: (v: number) => void;
   prefix?: string;
@@ -133,7 +148,7 @@ export function NumberField({
   }
 
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label} hint={hint} hideLabel={hideLabel}>
       {(id) => (
         <div className="flex items-center rounded-xl border border-stone-300 bg-white focus-within:border-stone-900 focus-within:ring-2 focus-within:ring-accent/40">
           {prefix && <span className="pl-3 text-stone-500">{prefix}</span>}

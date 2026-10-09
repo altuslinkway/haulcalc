@@ -5,57 +5,67 @@ import { applyRateCard } from "./rateCard";
 
 const card: RateCard = {
   business_name: "Haul Pros",
-  load_tiers: [
-    { label: "Full", fraction: 1, description: "", price_low: 600, price_high: 600 },
-    { label: "Half", fraction: 0.5, description: "", price_low: 350, price_high: 300 },
-  ],
-  item_fees: [
-    { name: "Mattress / box spring", pricing: "addon", price_low: 50, price_high: 50, cubic_yards_each: 0.75, lbs_each: 80, hint: "" },
-    { name: "Fridge", pricing: "flat", price_low: 130, price_high: 110, cubic_yards_each: 1.5, lbs_each: 250, hint: "" },
+  quarter_load: 200,
+  half_load: 350,
+  three_quarter_load: 500,
+  full_load: 650,
+  minimum_charge: 99,
+  items: [
+    { name: "TV", price: 50 },
+    { name: "Fridge ", price: 129.6 },
+    { name: "TV", price: 60 },
+    { name: "Free pickup", price: 0 },
   ],
   prohibited_items: ["Paint"],
-  minimum_charge: 99,
   notes: [],
 };
 
 describe("applyRateCard", () => {
   const next = applyRateCard(DEFAULT_SETTINGS, card);
 
-  it("replaces load tiers, sorted and with low ≤ high", () => {
-    expect(next.loadTiers.map((t) => t.label)).toEqual(["Half", "Full"]);
-    expect(next.loadTiers[0]).toMatchObject({ priceLow: 300, priceHigh: 350 });
+  it("takes the four load prices and the minimum", () => {
+    expect(next.loadPrices).toEqual({ quarter: 200, half: 350, threeQuarter: 500, full: 650 });
+    expect(next.minimumCharge).toBe(99);
   });
 
-  it("keeps disposal costs for items that carry over", () => {
-    expect(next.itemFees.find((f) => f.name === "Mattress / box spring")?.disposalCost).toBe(15);
-    expect(next.itemFees.find((f) => f.name === "Fridge")?.disposalCost).toBe(0);
+  it("replaces flat-rate items with unique ids, skipping ones with no price", () => {
+    expect(next.flatItems).toEqual([
+      { id: "tv", name: "TV", price: 50 },
+      { id: "fridge", name: "Fridge", price: 130 },
+      { id: "tv-2", name: "TV", price: 60 },
+    ]);
   });
 
-  it("keeps each item's pricing kind, size and weight", () => {
-    expect(next.itemFees.find((f) => f.name === "Fridge")).toMatchObject({
-      pricing: "flat",
-      priceLow: 110,
-      priceHigh: 130,
-      cubicYardsEach: 1.5,
-      lbsEach: 250,
+  it("fills in sizes the card doesn't price, keeping the usual shape", () => {
+    const s = applyRateCard(DEFAULT_SETTINGS, { ...card, quarter_load: null, three_quarter_load: null });
+    expect(s.loadPrices.half).toBe(350);
+    expect(s.loadPrices.full).toBe(650);
+    expect(s.loadPrices.quarter).toBeGreaterThan(DEFAULT_SETTINGS.minimumCharge);
+    expect(s.loadPrices.quarter).toBeLessThan(350);
+    expect(s.loadPrices.threeQuarter).toBeGreaterThan(350);
+    expect(s.loadPrices.threeQuarter).toBeLessThan(650);
+    expect(s.loadPrices.quarter % 5).toBe(0);
+  });
+
+  it("keeps the owner's prices when the card has none, and never lets the minimum pass a quarter load", () => {
+    const s = applyRateCard(DEFAULT_SETTINGS, {
+      ...card,
+      quarter_load: null,
+      half_load: null,
+      three_quarter_load: null,
+      full_load: null,
+      minimum_charge: 400,
+      items: [],
     });
+    expect(s.loadPrices).toEqual(DEFAULT_SETTINGS.loadPrices);
+    expect(s.minimumCharge).toBe(DEFAULT_SETTINGS.loadPrices.quarter);
+    expect(s.flatItems).toEqual(DEFAULT_SETTINGS.flatItems);
   });
 
-  it("copies prohibited items, minimum and business name", () => {
-    expect(next.prohibitedItems).toEqual(["Paint"]);
-    expect(next.charges.minimumCharge).toBe(99);
-    expect(next.businessName).toBe("Haul Pros");
-  });
-
-  it("leaves costs alone and doesn't mutate the input", () => {
+  it("leaves costs alone and only fills in a missing business name", () => {
     expect(next.costs).toEqual(DEFAULT_SETTINGS.costs);
-    expect(DEFAULT_SETTINGS.charges.minimumCharge).toBe(99);
-  });
-
-  it("keeps what the card doesn't mention", () => {
-    const sparse = applyRateCard(DEFAULT_SETTINGS, { ...card, load_tiers: [], item_fees: [], minimum_charge: null });
-    expect(sparse.loadTiers).toEqual(DEFAULT_SETTINGS.loadTiers);
-    expect(sparse.itemFees).toEqual(DEFAULT_SETTINGS.itemFees);
-    expect(sparse.charges.minimumCharge).toBe(99);
+    expect(next.businessName).toBe("Haul Pros");
+    expect(applyRateCard({ ...DEFAULT_SETTINGS, businessName: "Mine" }, card).businessName).toBe("Mine");
+    expect(next.prohibitedItems).toEqual(["Paint"]);
   });
 });

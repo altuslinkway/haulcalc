@@ -6,7 +6,13 @@ import { useSyncExternalStore } from "react";
 // subscribe to. Everything lives on one device for now; swap this for an
 // API-backed store once there are accounts.
 
-export function createLocalStore<T>(key: string, fallback: T, normalize: (saved: unknown) => T = (s) => s as T) {
+export function createLocalStore<T>(
+  key: string,
+  fallback: T,
+  normalize: (saved: unknown) => T = (s) => s as T,
+  /** Read an older version's data when nothing's saved under this key yet. */
+  migrate: () => T | null = () => null,
+) {
   const listeners = new Set<() => void>();
   let cache: T | null = null;
 
@@ -14,7 +20,7 @@ export function createLocalStore<T>(key: string, fallback: T, normalize: (saved:
     if (cache !== null) return cache;
     try {
       const raw = window.localStorage.getItem(key);
-      cache = raw ? normalize(JSON.parse(raw)) : fallback;
+      cache = raw ? normalize(JSON.parse(raw)) : (migrate() ?? fallback);
     } catch {
       cache = fallback;
     }
