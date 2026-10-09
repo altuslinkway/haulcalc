@@ -35,6 +35,7 @@ export function QuoteFlow() {
   const [aiEstimate, setAiEstimate] = useState<JobEstimate | null>(null);
   const [quoteId, setQuoteId] = useState("");
   const [demo, setDemo] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
   const [busy, setBusy] = useState<"photos" | "analyzing" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -55,7 +56,7 @@ export function QuoteFlow() {
       const room = MAX_PHOTOS - photos.length;
       const prepared = await Promise.all(Array.from(files).slice(0, room).map(preparePhoto));
       setPhotos((p) => [...p, ...prepared]);
-      if (files.length > room) setError(`Only ${MAX_PHOTOS} photos per quote — kept the first ${room}.`);
+      if (files.length > room) setError(`Only ${MAX_PHOTOS} photos per quote, so the first ${room} were kept.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't read that photo.");
     } finally {
@@ -135,21 +136,37 @@ export function QuoteFlow() {
 
   return (
     <div className="space-y-4">
-      <PhotoRequest settings={settings} />
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-display text-[32px] leading-none font-bold tracking-[-0.015em]">New quote</h1>
+        <button
+          type="button"
+          aria-expanded={askOpen}
+          onClick={() => setAskOpen((o) => !o)}
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3.5 text-sm font-bold"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 5h16v11H8l-4 4z" />
+          </svg>
+          Ask for photos
+        </button>
+      </div>
+      {askOpen && <PhotoRequest settings={settings} />}
 
       <Card title="Customer photos" subtitle="Add the pictures your customer sent. More angles = better estimate.">
         <div className="grid grid-cols-3 gap-2">
           {photos.map((p, i) => (
-            <div key={p.id} className="relative aspect-square overflow-hidden rounded-lg bg-stone-200">
+            <div key={p.id} className="relative aspect-square overflow-hidden rounded-[14px] bg-stone-200">
               {/* eslint-disable-next-line @next/next/no-img-element -- local data URL preview */}
               <img src={p.previewUrl} alt={`Customer photo ${i + 1}`} className="h-full w-full object-cover" />
               <button
                 type="button"
                 aria-label={`Remove photo ${i + 1}`}
                 onClick={() => setPhotos((ps) => ps.filter((x) => x.id !== p.id))}
-                className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-sm text-white"
+                className="absolute top-1 right-1 flex h-8 w-8 items-center justify-center rounded-full bg-stone-900/75 text-stone-100"
               >
-                ✕
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
               </button>
             </div>
           ))}
@@ -158,10 +175,13 @@ export function QuoteFlow() {
               type="button"
               onClick={() => fileInput.current?.click()}
               disabled={busy !== null}
-              className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-stone-300 text-stone-500 active:bg-stone-50"
+              className="flex aspect-square flex-col items-center justify-center gap-1 rounded-[14px] border-2 border-dashed border-stone-400 text-stone-600 active:bg-stone-50"
             >
-              <span className="text-3xl leading-none">+</span>
-              <span className="text-xs font-medium">{busy === "photos" ? "Loading…" : "Add photos"}</span>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+                <path d="M12 10v6M9 13h6" />
+              </svg>
+              <span className="text-[13px] font-semibold">{busy === "photos" ? "Loading…" : "Add photos"}</span>
             </button>
           )}
         </div>
@@ -206,8 +226,16 @@ export function QuoteFlow() {
               hint={`First ${settings.charges.freeCarryFeet} ft included`}
             />
           </div>
-          <details className="rounded-xl bg-stone-50 px-3 py-1">
-            <summary className="cursor-pointer py-2 text-sm font-medium text-stone-700">Job options</summary>
+          <details className="rounded-[14px] border border-stone-300 bg-white px-3.5 py-1">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 py-1.5">
+              <span className="flex flex-col">
+                <span className="text-[15px] font-semibold">Job options</span>
+                <span className="text-[13px] text-stone-500">Same-day, after-hours, paid lead</span>
+              </span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </summary>
             <div className="divide-y divide-stone-200">
               <Toggle
                 label="Same-day service"
@@ -252,7 +280,7 @@ export function QuoteFlow() {
 
       <button
         type="button"
-        className={`${buttonClass.primary} w-full`}
+        className={`${buttonClass.primary} min-h-[60px] w-full rounded-2xl text-lg`}
         disabled={photos.length === 0 || busy !== null}
         onClick={analyze}
       >
@@ -270,7 +298,7 @@ export function QuoteFlow() {
 
       {estimate && quote && (
         <div ref={resultsRef} className="scroll-mt-20 space-y-4 pt-2">
-          <PriceHero quote={quote} estimate={estimate} settings={settings} demo={demo} />
+          <PriceHero quote={quote} estimate={estimate} settings={settings} customerName={details.customerName} demo={demo} />
           {quote.warnings.length > 0 && <Warnings warnings={quote.warnings} />}
           <WhatWeSaw estimate={estimate} />
           <ItemsEditor
@@ -333,11 +361,9 @@ function CopyButton({ text, label = "Copy", onCopied }: { text: string; label?: 
 function PhotoRequest({ settings }: { settings: Settings }) {
   const message = buildPhotoRequestMessage(settings);
   return (
-    <details className="rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
-      <summary className="cursor-pointer text-sm font-semibold text-stone-800">
-        Customer asking for a quote? Send them this first
-      </summary>
-      <p className="mt-2 text-sm text-stone-500">
+    <section className="rounded-[20px] border border-stone-200 bg-white p-4">
+      <h2 className="font-display text-xl font-bold">Text this to your customer</h2>
+      <p className="mt-1 text-sm text-stone-600">
         Good photos and answers up front make the price hold on site. Edit the questions in My rates.
       </p>
       <pre className="mt-3 rounded-xl bg-stone-50 p-3 font-sans text-sm whitespace-pre-wrap text-stone-800">{message}</pre>
@@ -347,61 +373,75 @@ function PhotoRequest({ settings }: { settings: Settings }) {
           Text it
         </a>
       </div>
-    </details>
+    </section>
   );
 }
 
 const confidenceStyle = {
-  high: "bg-emerald-100 text-emerald-800",
-  medium: "bg-amber-100 text-amber-800",
-  low: "bg-red-100 text-red-800",
+  high: "bg-[#ddf3e4] text-[#14532d]",
+  medium: "bg-stone-100 text-stone-900",
+  low: "bg-amber-200 text-amber-950",
 };
 
 function PriceHero({
   quote,
   estimate,
   settings,
+  customerName,
   demo,
 }: {
   quote: Quote;
   estimate: JobEstimate;
   settings: Settings;
+  customerName: string;
   demo: boolean;
 }) {
   const capacity = trailerCubicYards(settings.trailer);
   const fillLow = Math.min(1, quote.volume.totalCubicYards.low / capacity);
   const fillHigh = Math.min(1, quote.volume.totalCubicYards.high / capacity);
+  const range = quote.total.low !== quote.total.high;
+  const notes = [
+    quote.volume.loads > 1 ? `About ${quote.volume.loads} trailer loads` : "",
+    quote.volume.unseenPct > 0 ? `Includes +${quote.volume.unseenPct}% for things not in the photos` : "",
+    quote.volume.calibrationPct !== 0
+      ? `${quote.volume.calibrationPct > 0 ? "+" : ""}${quote.volume.calibrationPct}% learned from ${
+          quote.volume.calibrationSource === "owner" ? "your" : "all owners'"
+        } past jobs`
+      : "",
+    quote.minimumApplied ? "Raised to your minimum charge" : "",
+  ].filter(Boolean);
+
   return (
-    <section className="rounded-2xl bg-stone-900 p-5 text-white shadow">
+    <section className="rounded-[22px] bg-stone-900 p-5 text-stone-100">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-stone-300">Quote</span>
+        <span className="text-sm text-stone-400">{customerName.trim() ? `Quote for ${customerName.trim()}` : "Quote"}</span>
         <div className="flex gap-1.5">
-          {demo && <span className="rounded-full bg-sky-200 px-2 py-0.5 text-xs font-semibold text-sky-900">Demo data</span>}
-          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${confidenceStyle[estimate.confidence]}`}>
-            {estimate.confidence} confidence
+          {demo && <span className="rounded-full bg-sky-200 px-2.5 py-0.5 text-xs font-bold text-sky-950">Demo data</span>}
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${confidenceStyle[estimate.confidence]}`}>
+            {estimate.confidence[0].toUpperCase() + estimate.confidence.slice(1)} confidence
           </span>
         </div>
       </div>
-      <p className="mt-1 text-4xl font-bold tracking-tight tabular-nums">{moneyRange(quote.total.low, quote.total.high)}</p>
-      <p className="mt-1 text-sm text-stone-300">
+      <p className="mt-1 text-[40px] leading-tight font-bold tracking-tight tabular-nums">
+        {moneyRange(quote.total.low, quote.total.high)}
+      </p>
+      <p className="text-sm text-stone-300">
         {quote.volume.tierLabel || "Flat-rate items only"}
-        {quote.total.low !== quote.total.high && <> · middle: {money(quote.suggested)}</>}
-        {quote.minimumApplied && <> · minimum charge applied</>}
+        {range && `, middle of the range ${money(quote.suggested)}`}
       </p>
       <div className="mt-4">
-        <div className="relative h-3 overflow-hidden rounded-full bg-white/15" aria-hidden>
-          <div className="absolute inset-y-0 left-0 bg-orange-500/50" style={{ width: `${fillHigh * 100}%` }} />
-          <div className="absolute inset-y-0 left-0 bg-orange-500" style={{ width: `${fillLow * 100}%` }} />
+        <div className="relative h-2.5 overflow-hidden rounded-full bg-stone-700" aria-hidden>
+          <div className="absolute inset-y-0 left-0 bg-accent/45" style={{ width: `${fillHigh * 100}%` }} />
+          <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${fillLow * 100}%` }} />
         </div>
         <p className="mt-1.5 text-xs text-stone-400">
-          Trailer space: {pct(quote.volume.totalCubicYards.low / capacity)}–{pct(quote.volume.totalCubicYards.high / capacity)}
-          {quote.volume.loads > 1 && ` · ${quote.volume.loads} loads`}
-          {quote.volume.unseenPct > 0 && ` · includes +${quote.volume.unseenPct}% for unseen items`}
-          {quote.volume.calibrationPct !== 0 &&
-            ` · ${quote.volume.calibrationPct > 0 ? "+" : ""}${quote.volume.calibrationPct}% learned from ${
-              quote.volume.calibrationSource === "owner" ? "your" : "all owners'"
-            } past jobs`}
+          Trailer space {pct(quote.volume.totalCubicYards.low / capacity)}–{pct(quote.volume.totalCubicYards.high / capacity)}
         </p>
+        {notes.map((n) => (
+          <p key={n} className="text-xs text-stone-400">
+            {n}
+          </p>
+        ))}
       </div>
     </section>
   );
@@ -411,12 +451,15 @@ const pct = (f: number) => `${Math.round(f * 100)}%`;
 
 function Warnings({ warnings }: { warnings: string[] }) {
   return (
-    <section className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
-      <h2 className="mb-2 text-sm font-semibold text-amber-900">Heads up</h2>
-      <ul className="space-y-1.5 text-sm text-amber-900">
+    <section className="rounded-[20px] border border-[#f0c36b] bg-[#fff1d6] p-4 text-[#4d3300]">
+      <h2 className="mb-2 font-display text-lg font-bold">Heads up</h2>
+      <ul className="space-y-2 text-sm leading-snug">
         {warnings.map((w) => (
           <li key={w} className="flex gap-2">
-            <span aria-hidden>⚠︎</span>
+            <svg className="mt-px flex-none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 4l9 16H3z" />
+              <path d="M12 10v4M12 17v.5" />
+            </svg>
             <span>{w}</span>
           </li>
         ))}
@@ -471,7 +514,7 @@ function Adjust({
               <button
                 key={t.id}
                 type="button"
-                className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 active:bg-stone-100"
+                className="min-h-11 rounded-full border border-stone-300 bg-white px-3.5 text-sm font-semibold text-stone-900 active:bg-stone-100"
                 // The tier tapped becomes the top of the range, so the quote reads as that load size.
                 onClick={() =>
                   onChange(scaleLoadTo(estimate, settings, (t.fraction * capacity) / rangeFactors(settings, estimate, details).high))

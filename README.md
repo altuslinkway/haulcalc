@@ -44,12 +44,12 @@ Defaults come from market research on US independents. See [`reports/Junk remova
 ```bash
 npm install
 cp .env.example .env.local   # add your ANTHROPIC_API_KEY
-npm run dev                  # http://localhost:3000
+npm run dev                  # website at http://localhost:3000, the app at /quote
 ```
 
 No API key yet? `npm run demo` runs the full app with sample AI answers.
 
-On a phone, open the site and use "Add to Home Screen". It runs like an app.
+On a phone, open `/quote` and use "Add to Home Screen". It opens straight into the app.
 
 ```bash
 npm test          # pricing engine, estimate edits, learning (incl. real Postgres via PGlite), AI mapping, rate card import
@@ -68,7 +68,9 @@ npm run lint
 | `src/app/api/analyze` | Photos → itemized job estimate. |
 | `src/app/api/rate-card` | Rate card photos → rates for the owner to review. |
 | `src/app/api/feedback`, `src/app/api/learning` | Owners' corrections in; what's been learned out. |
-| `src/components/` | Quote screen and item editor, Jobs, My rates, shared UI. |
+| `src/app/(marketing)/` | The public website at `/`. |
+| `src/app/(app)/` | The app: `/quote`, `/jobs`, `/settings`, with the bottom tab bar. |
+| `src/components/` | Quote screen and item editor, Jobs, My rates, app shell, shared UI. |
 
 The AI model defaults to Claude Opus 5.5 at medium effort (`HAULCALC_MODEL`, `HAULCALC_EFFORT` to change). Requests opt into Anthropic's server-side fallback, so a rare safety decline retries on another model instead of failing.
 

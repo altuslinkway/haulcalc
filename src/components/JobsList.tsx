@@ -36,7 +36,7 @@ export function JobsList() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold">Jobs</h1>
+        <h1 className="font-display text-[32px] leading-none font-bold tracking-[-0.015em]">Jobs</h1>
         <p className="text-sm text-stone-500">
           Quotes you&apos;ve sent. After each job, tap how it compared to the estimate. That&apos;s how the estimates get better.
         </p>
@@ -119,7 +119,7 @@ function YourAccuracy({ jobs, settings }: { jobs: SavedJob[]; settings: Settings
         <p className="mt-2 text-xs text-stone-500">
           Applying your own {current > 0 ? "+" : ""}
           {current}% correction to new quotes.{" "}
-          <button type="button" className="font-semibold text-orange-700" onClick={() => setCalibration(null)}>
+          <button type="button" className="font-bold text-accent-deep" onClick={() => setCalibration(null)}>
             Use what all owners have learned instead
           </button>
         </p>
@@ -158,7 +158,7 @@ function NetworkLearning({ settings }: { settings: Settings }) {
   return (
     <Card
       title="Learning from all owners"
-      subtitle={`${model.jobs.toLocaleString("en-US")} quotes from ${model.owners.toLocaleString("en-US")} owners so far.`}
+      subtitle={`${plural(model.jobs, "quote")} from ${plural(model.owners, "owner")} so far.`}
     >
       {model.items.length === 0 && scopes.length === 0 ? (
         <p className="text-sm text-stone-600">
@@ -175,8 +175,8 @@ function NetworkLearning({ settings }: { settings: Settings }) {
                     <li key={i.category} className="flex justify-between gap-3 py-1.5">
                       <span>{categoryById(i.category).label}</span>
                       <span className="text-right text-stone-500 tabular-nums">
-                        {i.perUnitCubicYards !== null && `${i.perUnitCubicYards} yd³ each · `}
-                        AI {i.biasPct > 0 ? "low" : "high"} by {Math.abs(i.biasPct)}%
+                        {i.perUnitCubicYards !== null && `${i.perUnitCubicYards} yd³ each, `}
+                        AI was {Math.abs(i.biasPct)}% {i.biasPct > 0 ? "low" : "high"}
                       </span>
                     </li>
                   ))}
@@ -200,7 +200,7 @@ function NetworkLearning({ settings }: { settings: Settings }) {
                     <span>{scopeLabel[scope as keyof typeof scopeLabel]}</span>
                     <span className="text-stone-500 tabular-nums">
                       {c!.pct > 0 ? "+" : ""}
-                      {c!.pct}% · {c!.owners} owners
+                      {c!.pct}% from {c!.owners} owners
                     </span>
                   </li>
                 ))}
@@ -227,11 +227,11 @@ function JobRow({ job }: { job: SavedJob }) {
     logOutcome(job, { won: true, rating, actualCubicYards: o?.actualCubicYards ?? null, finalPrice: o?.finalPrice ?? null, dumpWeightLbs: o?.dumpWeightLbs ?? null });
 
   return (
-    <li className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+    <li className="rounded-[20px] border border-stone-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-stone-900">
-            {job.customerName || "Customer"} · {date}
+            {job.customerName || "Customer"}, {date}
           </p>
           <p className="line-clamp-2 text-xs text-stone-500">{job.summary}</p>
         </div>
@@ -250,9 +250,9 @@ function JobRow({ job }: { job: SavedJob }) {
             role="radio"
             aria-checked={o?.won === true && o.rating === r.value}
             onClick={() => rate(r.value)}
-            className={`rounded-lg border px-1 py-2 text-xs leading-tight font-medium ${
+            className={`min-h-[52px] rounded-xl border px-1 py-2 text-xs leading-tight font-semibold ${
               o?.won && o.rating === r.value
-                ? "border-orange-600 bg-orange-600 text-white"
+                ? "border-stone-900 bg-stone-900 text-stone-100"
                 : "border-stone-300 bg-white text-stone-700 active:bg-stone-100"
             }`}
           >
@@ -262,7 +262,7 @@ function JobRow({ job }: { job: SavedJob }) {
       </div>
 
       <details className="group mt-2">
-        <summary className="cursor-pointer py-1 text-xs font-semibold text-orange-700">More detail: exact size, price, dump ticket</summary>
+        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-bold text-accent-deep">More detail: exact size, price, dump ticket</summary>
         <OutcomeForm job={job} />
       </details>
     </li>
@@ -334,3 +334,5 @@ function OutcomeForm({ job }: { job: SavedJob }) {
     </div>
   );
 }
+
+const plural = (n: number, word: string) => `${n.toLocaleString("en-US")} ${word}${n === 1 ? "" : "s"}`;

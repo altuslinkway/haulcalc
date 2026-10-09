@@ -32,7 +32,7 @@ export function SettingsForm() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold">My rates</h1>
+        <h1 className="font-display text-[32px] leading-none font-bold tracking-[-0.015em]">My rates</h1>
         <p className="text-sm text-stone-500">Changes save automatically on this device.</p>
       </div>
 
@@ -199,7 +199,7 @@ export function SettingsForm() {
           {settings.estimate.calibrationPct === null ? (
             <p className="text-sm text-stone-600">
               No correction of your own set.{" "}
-              <button type="button" className="font-semibold text-orange-700" onClick={() => update((s) => void (s.estimate.calibrationPct = 0))}>
+              <button type="button" className="font-bold text-accent-deep" onClick={() => update((s) => void (s.estimate.calibrationPct = 0))}>
                 Set my own
               </button>
             </p>
@@ -214,7 +214,7 @@ export function SettingsForm() {
                 onChange={(v) => update((s) => void (s.estimate.calibrationPct = v))}
                 hint="Replaces the all-owners correction on your quotes. +10 means your jobs run 10% bigger than the AI guesses. Jobs suggests one from your rated jobs."
               />
-              <button type="button" className="text-sm font-semibold text-orange-700" onClick={() => update((s) => void (s.estimate.calibrationPct = null))}>
+              <button type="button" className="min-h-11 text-sm font-bold text-accent-deep" onClick={() => update((s) => void (s.estimate.calibrationPct = null))}>
                 Clear it
               </button>
             </div>
@@ -529,7 +529,7 @@ function ListEditor({
         }}
       >
         <input
-          className="w-full min-w-0 rounded-lg border border-stone-300 px-3 py-2.5 text-base focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30 focus:outline-none"
+          className="w-full min-w-0 rounded-xl border border-stone-300 px-3 py-2.5 text-base focus:border-stone-900 focus:ring-2 focus:ring-accent/40 focus:outline-none"
           placeholder={placeholder}
           aria-label={placeholder}
           value={draft}
@@ -598,7 +598,7 @@ function RateCardImport({ settings }: { settings: Settings }) {
     <Card
       title="Import from your rate card"
       subtitle={`Snap or upload up to ${MAX_RATE_CARD_PHOTOS} photos of your price sheet, trailer sign or flyer. You'll review before anything changes.`}
-      className="border-orange-200 bg-orange-50/60"
+      className="border-accent-line bg-accent-soft"
     >
       <button type="button" className={`${buttonClass.primary} w-full`} disabled={busy} onClick={() => fileInput.current?.click()}>
         {busy ? "Reading your rate card…" : "Upload rate card photos"}

@@ -1,7 +1,31 @@
 @import "tailwindcss";
 
+/*
+ * The HaulCalc look: asphalt ink, cool grey ground, hi-vis orange.
+ * The stone scale is remapped to these greys so every screen shares them.
+ * Text on the accent is always ink, never white (white fails contrast).
+ */
 @theme inline {
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-barlow), system-ui, sans-serif;
+  --font-display: var(--font-barlow-condensed), var(--font-barlow), system-ui, sans-serif;
+}
+
+@theme {
+  --color-stone-50: #f7f8f6;
+  --color-stone-100: #f2f3f1;
+  --color-stone-200: #d9dcd8;
+  --color-stone-300: #c9cdc8;
+  --color-stone-400: #a7ada9;
+  --color-stone-500: #5b615e;
+  --color-stone-600: #4a504d;
+  --color-stone-700: #2e3330;
+  --color-stone-800: #1e2220;
+  --color-stone-900: #111413;
+
+  --color-accent: #ff5b1f;
+  --color-accent-deep: #8a3a0c;
+  --color-accent-soft: #fff1ea;
+  --color-accent-line: #ffc9b3;
 }
 
 :root {

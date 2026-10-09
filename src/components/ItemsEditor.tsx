@@ -84,7 +84,7 @@ export function ItemsEditor({
               {lines.length === 0 ? (
                 <p className="text-sm text-stone-500">{g.empty}</p>
               ) : (
-                <ul className="divide-y divide-stone-100 rounded-xl border border-stone-200">
+                <ul className="divide-y divide-stone-100 rounded-[14px] border border-stone-200">
                   {lines.map((line) => (
                     <LineRow key={line.id} line={line} settings={settings} estimate={estimate} onChange={onChange} />
                   ))}
@@ -147,7 +147,7 @@ function LineRow({
   return (
     <li>
       <details className="group">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
           <span className="min-w-0 text-sm text-stone-900">
             {line.quantity > 1 && <span className="font-semibold">{line.quantity}× </span>}
             {line.description}
@@ -227,7 +227,7 @@ function AddItem({ settings, onAdd }: { settings: Settings; onAdd: (line: Estima
 
   if (custom) {
     return (
-      <div className="space-y-3 rounded-xl border border-orange-200 bg-orange-50/50 p-3">
+      <div className="space-y-3 rounded-[14px] border border-accent-line bg-accent-soft p-3">
         <TextField
           label="What it is"
           placeholder="e.g. Pile of boxes behind the door"
@@ -271,7 +271,7 @@ function AddItem({ settings, onAdd }: { settings: Settings; onAdd: (line: Estima
   return (
     <select
       aria-label="Add an item"
-      className="w-full rounded-lg border border-dashed border-stone-300 bg-white px-3 py-2.5 text-base text-stone-700"
+      className="min-h-12 w-full rounded-[14px] border-[1.5px] border-dashed border-stone-400 bg-white px-3 py-2.5 text-base font-semibold text-stone-900"
       value=""
       onChange={(e) => {
         const v = e.target.value;
@@ -286,7 +286,7 @@ function AddItem({ settings, onAdd }: { settings: Settings; onAdd: (line: Estima
         <optgroup label="Your flat-rate and on-site items">
           {special.map((f) => (
             <option key={f.id} value={`fee:${f.id}`}>
-              {f.pricing === "flat" ? `${f.name} — ${priceText(f)} flat` : `${f.name} — quote on site`}
+              {f.pricing === "flat" ? `${f.name}, ${priceText(f)} flat` : `${f.name}, quote on site`}
             </option>
           ))}
         </optgroup>

@@ -1,32 +1,35 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
-import { Header } from "@/components/Header";
+import { Barlow, Barlow_Semi_Condensed } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const barlow = Barlow({
+  variable: "--font-barlow",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+});
+
+const barlowCondensed = Barlow_Semi_Condensed({
+  variable: "--font-barlow-condensed",
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
 });
 
 export const metadata: Metadata = {
-  title: "HaulCalc",
-  description: "Price junk removal jobs from customer photos in seconds.",
+  title: "HaulCalc: quote junk jobs from photos",
+  description: "Your customer texts photos. HaulCalc sizes up the load, prices it on your rates, and writes the text back.",
   appleWebApp: { capable: true, title: "HaulCalc", statusBarStyle: "black" },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1c1917",
+  themeColor: "#111413",
   width: "device-width",
   initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col bg-stone-100 text-stone-900">
-        <Header />
-        <main className="mx-auto w-full max-w-xl flex-1 px-4 pt-4 pb-16">{children}</main>
-      </body>
+    <html lang="en" className={`${barlow.variable} ${barlowCondensed.variable} h-full antialiased`}>
+      <body className="min-h-full bg-stone-100 font-sans text-stone-900">{children}</body>
     </html>
   );
 }

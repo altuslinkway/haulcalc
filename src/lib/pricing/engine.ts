@@ -331,10 +331,10 @@ export function computeQuote(settings: Settings, estimate: JobEstimate, details:
 
   // ---- Heads-ups for the owner ----
   for (const p of estimate.prohibitedItems) {
-    warnings.push(`Prohibited item: ${p.name} — ${p.reason}`);
+    warnings.push(`Prohibited item: ${p.name}. ${p.reason.replace(/\.$/, "")}.`);
   }
   for (const { line, fee } of onsiteLines) {
-    warnings.push(`${line.description} (${fee.name}) needs an on-site quote per your rates — not included in this price.`);
+    warnings.push(`${line.description} (${fee.name}) needs an on-site quote per your rates, so it isn't in this price.`);
   }
   if (loadLines.some((l) => l.material === "dense" && l.cubicYards > 0)) {
     if (charges.densePolicy === "decline") {
@@ -348,10 +348,10 @@ export function computeQuote(settings: Settings, estimate: JobEstimate, details:
       `Weight, not space, sets the trips: about ${trips.high} loads to stay under your ${payload.toLocaleString("en-US")} lb payload.`,
     );
   } else if (trips.high > 1) {
-    warnings.push(`About ${trips.high} trailer loads — plan for ${trips.high} dump trips.`);
+    warnings.push(`About ${trips.high} trailer loads, so plan for ${trips.high} dump trips.`);
   }
   if (estimate.confidence === "low") {
-    warnings.push("Low-confidence estimate — the photos may not show everything. Confirm before committing.");
+    warnings.push("Low-confidence estimate: the photos may not show everything. Confirm before committing.");
   }
   if (estimate.scope === "multi_area" && estimate.confidence !== "high") {
     warnings.push("Several rooms or a whole-house job: consider an on-site estimate before committing to a price.");

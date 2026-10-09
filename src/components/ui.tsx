@@ -16,11 +16,11 @@ export function Card({
   className?: string;
 }) {
   return (
-    <section className={`rounded-2xl border border-stone-200 bg-white p-4 shadow-sm ${className}`}>
+    <section className={`rounded-[20px] border border-stone-200 bg-white p-4 ${className}`}>
       {(title || action) && (
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            {title && <h2 className="text-base font-semibold text-stone-900">{title}</h2>}
+            {title && <h2 className="font-display text-xl font-bold text-stone-900">{title}</h2>}
             {subtitle && <p className="mt-0.5 text-sm text-stone-500">{subtitle}</p>}
           </div>
           {action}
@@ -32,7 +32,7 @@ export function Card({
 }
 
 const inputClass =
-  "w-full min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-base text-stone-900 placeholder:text-stone-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/30";
+  "w-full min-w-0 rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-base text-stone-900 placeholder:text-stone-500 focus:border-stone-900 focus:outline-none focus:ring-2 focus:ring-accent/40";
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: (id: string) => ReactNode }) {
   const id = useId();
@@ -135,7 +135,7 @@ export function NumberField({
   return (
     <Field label={label} hint={hint}>
       {(id) => (
-        <div className="flex items-center rounded-lg border border-stone-300 bg-white focus-within:border-orange-500 focus-within:ring-2 focus-within:ring-orange-500/30">
+        <div className="flex items-center rounded-xl border border-stone-300 bg-white focus-within:border-stone-900 focus-within:ring-2 focus-within:ring-accent/40">
           {prefix && <span className="pl-3 text-stone-500">{prefix}</span>}
           <input
             id={id}
@@ -223,10 +223,10 @@ export function Segmented<T extends string>({
 
 export const buttonClass = {
   primary:
-    "inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-3 text-base font-semibold text-white shadow-sm active:bg-orange-700 disabled:opacity-50",
+    "inline-flex min-h-12 items-center justify-center gap-2 rounded-[14px] bg-accent px-4 py-3 text-base font-extrabold text-stone-900 hover:brightness-95 active:brightness-90 disabled:opacity-50",
   secondary:
-    "inline-flex items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-3 text-base font-semibold text-stone-800 active:bg-stone-100 disabled:opacity-50",
-  ghost: "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-sm font-medium text-orange-700 active:bg-orange-50",
+    "inline-flex min-h-12 items-center justify-center gap-2 rounded-[14px] border-[1.5px] border-stone-900 bg-white px-4 py-3 text-base font-bold text-stone-900 active:bg-stone-100 disabled:opacity-50",
+  ghost: "inline-flex min-h-11 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-sm font-bold text-accent-deep active:bg-accent-soft",
 };
 
 export { money, moneyRange } from "@/lib/format";
@@ -258,7 +258,7 @@ export function Toggle({
       />
       <span
         aria-hidden
-        className="relative mt-0.5 h-6 w-11 shrink-0 rounded-full bg-stone-300 transition peer-checked:bg-orange-600 peer-focus-visible:ring-2 peer-focus-visible:ring-orange-500/40 after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-5"
+        className="relative mt-0.5 h-6 w-11 shrink-0 rounded-full bg-stone-300 transition peer-checked:bg-stone-900 peer-focus-visible:ring-2 peer-focus-visible:ring-accent/50 after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-5"
       />
     </label>
   );
