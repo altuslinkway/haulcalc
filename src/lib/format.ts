@@ -1,6 +1,7 @@
 // Shared formatting for money and trailer fractions.
 
-export const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+export const money = (n: number) =>
+  `${Math.round(n) < 0 ? "−" : ""}$${Math.abs(Math.round(n)).toLocaleString("en-US")}`;
 
 export const moneyRange = (low: number, high: number) =>
   Math.round(low) === Math.round(high) ? money(low) : `${money(low)} – ${money(high)}`;

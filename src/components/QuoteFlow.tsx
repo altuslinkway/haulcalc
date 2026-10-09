@@ -9,7 +9,7 @@ import { saveJob, type SavedJob } from "@/lib/client/jobsStore";
 import { preparePhoto, type Photo } from "@/lib/client/photos";
 import { useSettings } from "@/lib/client/settingsStore";
 import { DEFAULT_DETAILS, TRAILERS } from "@/lib/pricing/defaults";
-import { capacityOf, computeQuote, LOAD_SIZES, loadPrice } from "@/lib/pricing/engine";
+import { capacityOf, computeQuote, EIGHTH, LOAD_SIZES, loadPrice } from "@/lib/pricing/engine";
 import { setLoadSize } from "@/lib/pricing/estimate";
 import {
   buildPhotoRequestMessage,
@@ -19,9 +19,9 @@ import {
   type QuoteStyle,
 } from "@/lib/pricing/message";
 import { EMPTY_PICK, quickEstimate, quickSummary, type QuickPick } from "@/lib/pricing/quick";
-import type { JobDetails, JobEstimate, Quote, Settings } from "@/lib/pricing/types";
+import type { JobDetails, JobEstimate, Quote, Range, Settings } from "@/lib/pricing/types";
 import { ItemsEditor } from "./ItemsEditor";
-import { buttonClass, Card, money, moneyRange, NumberField, PageTitle, Segmented, Stepper, TextArea, TextField } from "./ui";
+import { buttonClass, Card, money, moneyRange, NumberField, PageTitle, Segmented, Stepper, TextArea, TextField, Toggle } from "./ui";
 
 type Mode = "photos" | "quick";
 
@@ -29,13 +29,13 @@ const newId = () => crypto.randomUUID();
 const mid = (r: { low: number; high: number }) => Math.round((r.low + r.high) / 2);
 
 /** The parts of a saved job that are the same however it was priced. */
-function jobBase(details: JobDetails, quote: Quote): Omit<SavedJob, "id" | "summary" | "source" | "sentPrice" | "aiCubicYards" | "quotedCubicYards" | "calibrationPct" | "shared" | "trailerCubicYards"> {
+function jobBase(details: JobDetails, quote: Quote, total: Range): Omit<SavedJob, "id" | "summary" | "source" | "sentPrice" | "aiCubicYards" | "quotedCubicYards" | "calibrationPct" | "shared" | "trailerCubicYards"> {
   return {
     createdAt: new Date().toISOString(),
     customerName: details.customerName.trim(),
     customerPhone: details.customerPhone.trim(),
-    priceLow: quote.total.low,
-    priceHigh: quote.total.high,
+    priceLow: total.low,
+    priceHigh: total.high,
     estCosts: { dump: mid(quote.costs.dump), gas: mid(quote.costs.gas), helpers: mid(quote.costs.helpers) },
     status: "quoted",
     jobDate: null,
@@ -134,12 +134,12 @@ export function QuoteFlow() {
   }
 
   /** Save the sent quote to Jobs and, if the owner shares data, send the AI's guess next to their corrections. */
-  function recordSent(sentPrice: number | null) {
+  function recordSent(sentPrice: number | null, total: Range) {
     if (!estimate || !quote || !aiEstimate) return;
     const totalCy = (e: JobEstimate) => e.lines.reduce((s, l) => s + l.cubicYards, 0);
     const shared = settings.learning.shareData;
     saveJob({
-      ...jobBase(details, quote),
+      ...jobBase(details, quote, total),
       id: quoteId,
       summary: estimate.summary,
       source: "photos",
@@ -166,10 +166,10 @@ export function QuoteFlow() {
   }
 
   /** Quick quotes go to Jobs too. There's no AI guess in them, so nothing goes to shared learning. */
-  function recordQuickSent(sentPrice: number | null) {
+  function recordQuickSent(sentPrice: number | null, total: Range) {
     const cy = quick.estimate.lines.reduce((s, l) => s + l.cubicYards, 0);
     saveJob({
-      ...jobBase(details, quick.quote),
+      ...jobBase(details, quick.quote, total),
       id: (quickId.current ??= newId()),
       summary: `Quick quote: ${quick.what}`,
       source: "quick",
@@ -288,6 +288,14 @@ export function QuoteFlow() {
             onChange={(v) => setDetail("distanceMiles", v)}
             hint={settings.extras.perMile > 0 ? `First ${settings.extras.freeMiles} mi free, then ${money(settings.extras.perMile)} a mile` : undefined}
           />
+          {settings.extras.curbsidePct > 0 && (
+            <Toggle
+              label="Curbside pickup"
+              hint={`They bring it all to the curb or driveway: ${settings.extras.curbsidePct}% off, no stairs`}
+              checked={details.curbside}
+              onChange={(v) => setDetail("curbside", v)}
+            />
+          )}
           {mode === "photos" && (
             <TextArea
               label="What they said"
@@ -394,7 +402,7 @@ export function QuoteFlow() {
                 quote={quote}
                 details={details}
                 allowRange
-                build={(style, price) => buildQuoteMessage(settings, estimate, details, quote, style, price)}
+                build={(style, price, offer, pct) => buildQuoteMessage(settings, estimate, details, offer, style, price, pct)}
                 onSent={recordSent}
               />
               <button type="button" className={`${buttonClass.secondary} w-full`} onClick={reset}>
@@ -408,7 +416,7 @@ export function QuoteFlow() {
   );
 }
 
-const QUICK_SIZES = [{ key: "none", label: "Items only", fraction: 0 }, ...LOAD_SIZES] as const;
+const QUICK_SIZES = [{ key: "none", label: "Items only", fraction: 0 }, EIGHTH, ...LOAD_SIZES] as const;
 
 function QuickQuote({
   settings,
@@ -430,7 +438,7 @@ function QuickQuote({
   estimate: JobEstimate;
   quote: Quote;
   what: string;
-  onSent: (sentPrice: number | null) => void;
+  onSent: (sentPrice: number | null, total: Range) => void;
   onReset: () => void;
 }) {
   const setCount = (id: string, n: number) => onPick({ ...pick, items: { ...pick.items, [id]: Math.max(0, n) } });
@@ -439,21 +447,22 @@ function QuickQuote({
   return (
     <>
       <Card title="How much junk?" subtitle="Charged by the load. Add flat-rate items below.">
-        <div role="radiogroup" aria-label="Load size" className="grid grid-cols-5 gap-1.5">
+        <div role="radiogroup" aria-label="Load size" className="grid grid-cols-3 gap-1.5">
           {QUICK_SIZES.map((size) => {
-            const on = pick.fraction === size.fraction;
+            // "Full" stays picked for 2 or more full loads.
+            const on = size.fraction === 1 ? pick.fraction >= 1 : pick.fraction === size.fraction;
             return (
               <button
                 key={size.key}
                 type="button"
                 role="radio"
                 aria-checked={on}
-                onClick={() => onPick({ ...pick, fraction: size.fraction })}
+                onClick={() => onPick({ ...pick, fraction: size.fraction === 1 && pick.fraction >= 1 ? pick.fraction : size.fraction })}
                 className={`flex min-h-[64px] flex-col items-center justify-center gap-0.5 rounded-[14px] px-1 ${
                   on ? "bg-stone-900 text-stone-100" : "border border-stone-300 bg-stone-50 text-stone-900 active:bg-stone-100"
                 }`}
               >
-                <span className={`font-extrabold ${size.fraction === 0 ? "text-[13px] leading-tight" : "text-[17px]"}`}>{size.label}</span>
+                <span className="text-[17px] font-extrabold">{size.label}</span>
                 <span className={`text-xs font-semibold tabular-nums ${on ? "text-stone-300" : "text-stone-500"}`}>
                   {size.fraction === 0 ? "$0" : money(loadPrice(size.fraction, settings))}
                 </span>
@@ -461,6 +470,15 @@ function QuickQuote({
             );
           })}
         </div>
+        {pick.fraction >= 1 && (
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-stone-100 pt-3">
+            <span>
+              <span className="block text-[15px] font-semibold">How many full loads?</span>
+              <span className="block text-[13px] text-stone-500">{money(settings.loadPrices.full)} each</span>
+            </span>
+            <Stepper label="full loads" min={1} value={Math.round(pick.fraction)} onChange={(n) => onPick({ ...pick, fraction: Math.max(1, n) })} />
+          </div>
+        )}
       </Card>
 
       <Card title="Plus items">
@@ -521,7 +539,7 @@ function QuickQuote({
             quote={quote}
             details={details}
             allowRange={false}
-            build={(_, price) => buildQuickQuoteMessage(settings, details, what, price)}
+            build={(_, price, __, pct) => buildQuickQuoteMessage(settings, details, what, price, pct)}
             onSent={onSent}
           />
           <button type="button" className={`${buttonClass.secondary} w-full`} onClick={onReset}>
@@ -630,8 +648,9 @@ function PriceHero({
   const fillLow = Math.min(1, quote.volume.totalCubicYards.low / capacity);
   const fillHigh = Math.min(1, quote.volume.totalCubicYards.high / capacity);
   const range = quote.total.low !== quote.total.high;
+  const sizes = [EIGHTH, ...LOAD_SIZES];
   const picked = estimate.sizedByOwner
-    ? LOAD_SIZES.find((s) => Math.abs(quote.volume.trailerFraction.high - s.fraction) < 0.005)?.key
+    ? sizes.find((s) => Math.abs(quote.volume.trailerFraction.high - s.fraction) < 0.005)?.key
     : undefined;
   const notes = [
     quote.volume.loads > 1 ? `About ${quote.volume.loads} trailer loads` : "",
@@ -682,8 +701,8 @@ function PriceHero({
       </div>
       <div className="mt-4 border-t border-stone-700 pt-3">
         <p className="mb-2 text-sm font-semibold">Know better? It&apos;s really about a…</p>
-        <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="Set the load size">
-          {LOAD_SIZES.map((size) => (
+        <div className="grid grid-cols-5 gap-1.5" role="group" aria-label="Set the load size">
+          {sizes.map((size) => (
             <button
               key={size.key}
               type="button"
@@ -870,18 +889,24 @@ function SendQuote({
   details: JobDetails;
   /** Photo quotes can go out as a range; quick quotes are one price. */
   allowRange: boolean;
-  build: (style: QuoteStyle, price: number) => string;
-  onSent: (sentPrice: number | null) => void;
+  /** The text for a style and price, given the quote after any discount and the discount %. */
+  build: (style: QuoteStyle, price: number, offer: Quote, discountPct: number) => string;
+  onSent: (sentPrice: number | null, total: Range) => void;
 }) {
   const [style, setStyle] = useState<QuoteStyle>(allowRange ? "range" : "single");
   const [price, setPrice] = useState<number | null>(null);
+  const [discount, setDiscount] = useState(0);
   // Hand edits stick until the generated message changes underneath them.
   const [edit, setEdit] = useState<{ base: string; text: string } | null>(null);
 
-  const singlePrice = price ?? quote.suggested;
-  const generated = build(style, singlePrice);
+  const pct = Math.min(90, Math.max(0, discount));
+  const cut = (n: number) => Math.round(n * (1 - pct / 100));
+  const offer: Quote =
+    pct > 0 ? { ...quote, total: { low: cut(quote.total.low), high: cut(quote.total.high) }, suggested: cut(quote.suggested) } : quote;
+  const singlePrice = price ?? offer.suggested;
+  const generated = build(style, singlePrice, offer, pct);
   const message = edit?.base === generated ? edit.text : generated;
-  const sent = () => onSent(style === "single" ? singlePrice : null);
+  const sent = () => onSent(style === "single" ? singlePrice : null, offer.total);
   const name = details.customerName.trim();
 
   return (
@@ -898,8 +923,27 @@ function SendQuote({
             ]}
           />
         )}
-        {style === "single" && (
-          <NumberField label="Price to quote" prefix="$" value={singlePrice} onChange={setPrice} inputMode="numeric" />
+        <div className={`grid gap-3 ${style === "single" ? "grid-cols-[1fr_7.5rem]" : "grid-cols-1"}`}>
+          {style === "single" && (
+            <NumberField label="Price to quote" prefix="$" value={singlePrice} onChange={setPrice} inputMode="numeric" />
+          )}
+          <NumberField
+            label="Discount"
+            suffix="%"
+            value={discount}
+            format={(n) => (n > 0 ? String(n) : "")}
+            onChange={(n) => {
+              setDiscount(n);
+              setPrice(null);
+            }}
+            inputMode="numeric"
+            hint={style === "single" ? undefined : "Optional, like 10% for a repeat customer"}
+          />
+        </div>
+        {pct > 0 && (
+          <p className="rounded-xl bg-accent-soft px-3 py-2 text-sm text-accent-deep">
+            {pct}% off: {moneyRange(offer.total.low, offer.total.high)} instead of {moneyRange(quote.total.low, quote.total.high)}
+          </p>
         )}
         <TextArea label="Message" value={message} onChange={(text) => setEdit({ base: generated, text })} rows={8} />
         <div className="grid grid-cols-[1fr_auto] gap-2">

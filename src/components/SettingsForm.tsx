@@ -124,6 +124,12 @@ export function SettingsForm() {
             value={extras.heavyPerTon}
             onChange={(v) => update((s) => void (s.extras.heavyPerTon = v))}
           />
+          <NumberField
+            label="Curbside discount"
+            suffix="% off"
+            value={extras.curbsidePct}
+            onChange={(v) => update((s) => void (s.extras.curbsidePct = Math.min(90, v)))}
+          />
         </div>
         <p className="mt-2 text-xs text-stone-500">
           Heavy loads are concrete, dirt, shingles and the like. Normal junk weight is included in your load prices.
@@ -174,13 +180,22 @@ export function SettingsForm() {
         />
       </Card>
 
-      <Card title="Getting paid" subtitle="Goes in the thank-you text you send after a job.">
-        <TextField
-          label="How customers can pay you"
-          placeholder="e.g. Venmo @joes-hauling"
-          value={settings.paymentInfo}
-          onChange={(v) => update((s) => void (s.paymentInfo = v))}
-        />
+      <Card title="After the job" subtitle="Goes in the thank-you text you send when a job's done.">
+        <div className="space-y-3">
+          <TextField
+            label="How customers can pay you"
+            placeholder="e.g. Venmo @joes-hauling"
+            value={settings.paymentInfo}
+            onChange={(v) => update((s) => void (s.paymentInfo = v))}
+          />
+          <TextField
+            label="Your review link"
+            hint="Your Google Business review link. More reviews, more calls."
+            placeholder="e.g. https://g.page/r/…"
+            value={settings.reviewLink}
+            onChange={(v) => update((s) => void (s.reviewLink = v))}
+          />
+        </div>
       </Card>
 
       <Backup />

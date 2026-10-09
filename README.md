@@ -11,13 +11,16 @@ Quote junk removal jobs from customer photos in seconds. Built for independent h
    - **Four load prices** (1/4, 1/2, 3/4, full trailer). Sizes in between are priced in between, starting from your **minimum charge**, so a 3/8 load lands halfway between the 1/4 and 1/2 prices. Bigger than one trailer is full loads plus the rest. A bigger load never costs less, even if prices are typed out of order.
    - **Flat-rate items**, as many as you like ($50 for a TV, $170 for a fridge). Charged their price on top of the load; their space counts toward trips but is never billed twice.
    - **Extras:** travel past your free miles, stairs per flight, and a per-ton charge for loads heavier than normal junk (concrete, dirt, shingles), never less than twice your dump fee.
+   - **Curbside pickup:** one switch on the quote takes your curbside discount (25% to start) off the load and items, and drops stairs.
    - **A range, not a guess.** It spreads around what's visible by how sure the AI is, leaves 10% room for what the photos don't show (20% for multi-room jobs or unclear photos), and applies any learned correction. The owner doesn't set any of this.
    - Never below the **minimum charge**; otherwise rounded to $5.
 5. **What you'd keep.** Dump fees by weight, gas for the drive and dump run, and helper pay come out of the price, with a heads-up when costs eat most of it.
 6. **Send it.** Text it straight to the customer's number (or copy it), and it's saved under **Jobs**.
 7. **It gets smarter with every job** (see below).
 
-**No photos? Quick quote.** On the phone with a customer, tap the load size (or "items only"), add flat-rate items and stairs, and the price is ready to text. Same pricing engine, one price, no AI.
+**No photos? Quick quote.** On the phone with a customer, tap the load size (items only, 1/8 up to Full, or several full loads), add flat-rate items and stairs, and the price is ready to text. Same pricing engine, one price, no AI.
+
+**Discounts.** Any quote can take an optional discount (say 10% for a repeat customer); the text shows "(10% off)" and Jobs records the discounted price.
 
 ## Jobs and money
 
@@ -26,7 +29,7 @@ Built for weekend haulers, not a CRM: each sent quote is a card that moves **Quo
 - **They booked:** optionally set the job day. Booked jobs show as a badge on the Jobs tab until they're marked done.
 - **Mark done:** what you charged, how you were paid (cash, Venmo, card, not yet), the dump fee if you have the ticket, and for photo quotes how big the job really was (that rating feeds the learning below).
 - **The month at a glance:** money made, what you kept after dump fees, gas and helper pay, dump fees, and what's booked and coming up. Step back through earlier months.
-- **Thank-you text:** one tap sends thanks, the total, and your payment info (set under My rates → Getting paid).
+- **Thank-you text:** one tap sends thanks, the total, your payment info and your Google review link (set under My rates → After the job).
 - **Backup:** everything lives on the phone, so My rates can save a backup file and restore it on another phone.
 
 ## How estimates improve over time

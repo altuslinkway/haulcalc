@@ -23,13 +23,16 @@ export const DEFAULT_SETTINGS: Settings = {
   flatItems: [
     { id: "mattress", name: "Mattress", price: 60 },
     { id: "couch", name: "Couch", price: 100 },
+    { id: "sectional", name: "Sectional", price: 250 },
     { id: "tv", name: "TV", price: 50 },
     { id: "appliance", name: "Appliance", price: 120 },
     { id: "fridge", name: "Fridge or freezer", price: 170 },
     { id: "hot-tub", name: "Hot tub", price: 400 },
+    { id: "piano", name: "Piano", price: 275 },
+    { id: "heavy-bed", name: "Concrete or dirt, per pickup bed", price: 150 },
   ],
 
-  extras: { freeMiles: 25, perMile: 4, stairsPerFlight: 25, heavyPerTon: 150 },
+  extras: { freeMiles: 25, perMile: 4, stairsPerFlight: 25, heavyPerTon: 150, curbsidePct: 25 },
 
   costs: { dumpFeePerTon: 65, gasPerMile: 0.75, helpers: 1, helperPerHour: 20 },
 
@@ -52,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ],
 
   paymentInfo: "",
+  reviewLink: "",
 
   learning: { shareData: true, useNetwork: true },
   calibrationPct: null,
@@ -62,4 +66,5 @@ export const DEFAULT_DETAILS: JobDetails = {
   customerPhone: "",
   distanceMiles: 0,
   stairsFlights: null,
+  curbside: false,
 };

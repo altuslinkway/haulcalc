@@ -86,7 +86,9 @@ describe("loadPrice", () => {
 
 describe("sizeLabel", () => {
   it("names the load size, rounding up", () => {
-    expect(sizeLabel({ low: 0.05, high: 0.1 })).toBe("Small load");
+    expect(sizeLabel({ low: 0.03, high: 0.05 })).toBe("Small load");
+    expect(sizeLabel({ low: 0.1, high: 0.125 })).toBe("1/8 load");
+    expect(sizeLabel({ low: 0.05, high: 0.1 })).toBe("Small to 1/8 load");
     expect(sizeLabel({ low: 0.25, high: 0.25 })).toBe("1/4 load");
     expect(sizeLabel({ low: 0.3, high: 0.45 })).toBe("1/2 load");
     expect(sizeLabel({ low: 0.45, high: 0.6 })).toBe("1/2 to 3/4 load");
@@ -214,6 +216,16 @@ describe("computeQuote: the price", () => {
     // $50 TV + $48 travel rounds to $100.
     expect(q.total).toEqual({ low: 100, high: 100 });
     expect(q.minimumApplied).toBe(false);
+  });
+
+  it("takes the curbside share off the load and items, but not travel, and drops stairs", () => {
+    const e = setLoadSize(estimate({ stairsFlights: 2, lines: [line(), fridge()] }), settings(), 0.5);
+    const d = { ...details, distanceMiles: 35, curbside: true };
+    const q = computeQuote(settings(), e, d);
+    expect(lineAmount(q, "Curbside pickup")).toEqual({ low: -150, high: -150 });
+    expect(lineAmount(q, "Stairs")).toBeUndefined();
+    // (430 + 170) × 75% + $40 travel.
+    expect(q.total).toEqual({ low: 490, high: 490 });
   });
 
   it("never goes below the minimum charge", () => {

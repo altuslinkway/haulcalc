@@ -12,6 +12,7 @@ export function buildQuoteMessage(
   quote: Quote,
   style: QuoteStyle,
   price?: number,
+  discountPct = 0,
 ): string {
   const greeting = details.customerName.trim() ? `Hi ${details.customerName.trim()}!` : "Hi!";
   const from = settings.businessName.trim() ? ` This is ${settings.businessName.trim()}.` : "";
@@ -25,7 +26,7 @@ export function buildQuoteMessage(
   const size = label ? ` (about ${label.endsWith("loads") ? "" : "a "}${label})` : "";
   const parts = [
     `${greeting}${from} Thanks for sending the photos.`,
-    `Based on what we can see${size}, your price is ${priceText}, including labor, loading, hauling and disposal.`,
+    `Based on what we can see${size}, your price${forWhat(details)} is ${priceText}${off(discountPct)}, including ${included(details)}.`,
   ];
 
   const prohibited = estimate.prohibitedItems.map((p) => midSentence(p.name));
@@ -76,13 +77,24 @@ export function smsHref(phone: string, body: string): string {
   return `sms:${to}?&body=${encodeURIComponent(body)}`;
 }
 
+const forWhat = (details: JobDetails) => (details.curbside ? " for curbside pickup" : "");
+const included = (details: JobDetails) =>
+  details.curbside ? "loading from the curb, hauling and disposal" : "labor, loading, hauling and disposal";
+const off = (pct: number) => (pct > 0 ? ` (${Math.round(pct)}% off)` : "");
+
 /** The quote text for a quick quote, priced without photos. */
-export function buildQuickQuoteMessage(settings: Settings, details: JobDetails, what: string, price: number): string {
+export function buildQuickQuoteMessage(
+  settings: Settings,
+  details: JobDetails,
+  what: string,
+  price: number,
+  discountPct = 0,
+): string {
   const greeting = details.customerName.trim() ? `Hi ${details.customerName.trim()}!` : "Hi!";
   const from = settings.businessName.trim() ? ` This is ${settings.businessName.trim()}.` : "";
   return [
     `${greeting}${from} Thanks for reaching out.`,
-    `For ${what}, your price is ${money(price)}, including labor, loading, hauling and disposal.`,
+    `For ${what}${forWhat(details)}, your price is ${money(price)}${off(discountPct)}, including ${included(details)}.`,
     "We'll confirm the final price on site before we start, and it won't go over that unless there's more to take. Want to get on the schedule?",
   ].join("\n\n");
 }
@@ -96,12 +108,16 @@ export function buildThankYouMessage(
 ): string {
   const name = customerName.trim();
   const pay = settings.paymentInfo.trim();
+  const review = settings.reviewLink.trim();
   const sign = settings.businessName.trim() ? `\n\n${settings.businessName.trim()}` : "";
   return [
     `Thanks${name ? `, ${name}` : ""}! It was great working with you, and everything's gone.`,
     paid
       ? `Got your payment of ${money(total)}. Thank you!`
       : `Your total is ${money(total)}.${pay ? ` You can pay with ${pay}.` : ""}`,
+    review ? `If you have a minute, a quick review would mean a lot: ${review}` : "",
     `If you know anyone who needs junk hauled, we'd love the referral.${sign}`,
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }

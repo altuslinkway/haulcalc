@@ -45,6 +45,9 @@ export function capacityOf(settings: Settings): number {
   return Math.max(1, settings.trailer.cubicYards || 0);
 }
 
+/** The 1/8 "minimum load" many rate cards list: priced on the line between your minimum and your 1/4 price. */
+export const EIGHTH = { key: "eighth", label: "1/8", fraction: 0.125 } as const;
+
 /** Load sizes as a share of the trailer, in the order the owner prices them. */
 export const LOAD_SIZES = [
   { key: "quarter", label: "1/4", fraction: 0.25 },
@@ -88,8 +91,8 @@ function loadCurve(settings: Settings): [number, number][] {
 
 /** The load size a share of the trailer rounds up to (a hair over still counts). */
 function sizeName(fraction: number): string {
-  if (fraction < 0.125 - EPS) return "Small";
-  return LOAD_SIZES.find((s) => fraction <= s.fraction + EPS)?.label ?? "Full";
+  if (fraction < 0.0625 - EPS) return "Small";
+  return [EIGHTH, ...LOAD_SIZES].find((s) => fraction <= s.fraction + EPS)?.label ?? "Full";
 }
 
 /** "1/2 load", "1/4 to 1/2 load", "1 to 2 loads"; empty for nothing. */
@@ -186,7 +189,8 @@ export function computeQuote(settings: Settings, estimate: JobEstimate, details:
   const trips = { low: tripsFor(totalCy.low, totalLbs.low), high: tripsFor(totalCy.high, totalLbs.high) };
   const weightLimited = trips.high > Math.max(1, Math.ceil(totalCy.high / capacity - EPS));
 
-  const flights = details.stairsFlights ?? estimate.stairsFlights;
+  // Curbside: nothing to carry, so no stairs.
+  const flights = details.curbside ? 0 : (details.stairsFlights ?? estimate.stairsFlights);
   const roundTripMiles = Math.max(0, details.distanceMiles) * 2;
 
   // ---- The price ----
@@ -208,6 +212,14 @@ export function computeQuote(settings: Settings, estimate: JobEstimate, details:
       detail: `${money(item.price)} each`,
       amount: fixed(item.price * line.quantity),
     });
+  }
+
+  // Curbside takes a share off the hauling (load and items), not off travel or heavy-load fees.
+  const curbsidePct = Math.min(90, Math.max(0, extras.curbsidePct || 0));
+  if (details.curbside && curbsidePct > 0 && lines.length > 0) {
+    const off = (s: "low" | "high") => -round((sum(lines, (l) => l.amount[s]) * curbsidePct) / 100);
+    // Low and high stay paired with their scenarios, so the low end takes the smaller discount.
+    lines.push({ label: "Curbside pickup", detail: `${curbsidePct}% off, everything at the curb`, amount: { low: off("low"), high: off("high") } });
   }
 
   const travelMiles = Math.max(0, details.distanceMiles - extras.freeMiles);

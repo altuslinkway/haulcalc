@@ -92,6 +92,7 @@ const NAME_HINTS: [RegExp, ItemCategoryId][] = [
   [/desk/i, "desk"],
   [/table/i, "table"],
   [/chair/i, "chair"],
+  [/concrete|dirt|brick|rock|gravel|soil/i, "dense"],
   [/tire/i, "other"],
 ];
 

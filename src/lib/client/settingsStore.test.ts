@@ -44,7 +44,7 @@ describe("saved settings", () => {
       { id: "mattress", name: "Mattress", price: 40 },
     ]);
     expect(s.minimumCharge).toBe(95);
-    expect(s.extras).toEqual({ freeMiles: 20, perMile: 3, stairsPerFlight: 30, heavyPerTon: 180 });
+    expect(s.extras).toEqual({ freeMiles: 20, perMile: 3, stairsPerFlight: 30, heavyPerTon: 180, curbsidePct: 25 });
     expect(s.costs).toEqual({ dumpFeePerTon: 70, gasPerMile: 0.8, helpers: 1, helperPerHour: 22 });
     expect(s.calibrationPct).toBe(12);
   });

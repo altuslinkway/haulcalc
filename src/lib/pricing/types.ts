@@ -37,6 +37,8 @@ export interface Settings {
     stairsPerFlight: number;
     /** For concrete, dirt, shingles and other loads heavier than normal junk. */
     heavyPerTon: number;
+    /** Off the load and items when the customer brings everything to the curb. */
+    curbsidePct: number;
   };
 
   /** Rough costs, so the quote can show what you'd keep. */
@@ -53,6 +55,8 @@ export interface Settings {
   standardQuestions: string[];
   /** How customers can pay you (a Venmo, Cash App or Zelle name), for the thank-you text. */
   paymentInfo: string;
+  /** Your Google (or other) review link, so the thank-you text can ask for a review. */
+  reviewLink: string;
 
   /** Pooling anonymous corrections across owners so estimates improve for everyone. */
   learning: {
@@ -115,6 +119,8 @@ export interface JobDetails {
   distanceMiles: number;
   /** Overrides the AI's guess when set. */
   stairsFlights: number | null;
+  /** The customer brings everything to the curb or driveway: cheaper, and no stairs. */
+  curbside: boolean;
 }
 
 export interface Range {

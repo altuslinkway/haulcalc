@@ -19,6 +19,7 @@ export function withDefaults(saved: unknown): Settings {
     costs: { ...d.costs, ...s.costs },
     learning: { ...d.learning, ...s.learning },
     paymentInfo: typeof s.paymentInfo === "string" ? s.paymentInfo : "",
+    reviewLink: typeof s.reviewLink === "string" ? s.reviewLink : "",
     calibrationPct: s.calibrationPct ?? null,
   };
 }
@@ -84,6 +85,7 @@ export function fromV2(old: SettingsV2): Settings {
       perMile: old.charges.travelFeePerMile,
       stairsPerFlight: old.charges.stairsFeePerFlight,
       heavyPerTon: old.charges.heavyFeePerTon,
+      curbsidePct: s.extras.curbsidePct,
     };
   }
   if (old.costs) {
