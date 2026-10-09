@@ -17,7 +17,9 @@ export function buildQuoteMessage(
   const from = settings.businessName.trim() ? ` This is ${settings.businessName.trim()}.` : "";
 
   const single = style === "single" || quote.total.low === quote.total.high;
-  const priceText = single ? money(price ?? quote.suggested) : `${money(quote.total.low)}–${money(quote.total.high)}`;
+  // A typed single price only counts while "single price" is chosen.
+  const one = style === "single" ? (price ?? quote.suggested) : quote.suggested;
+  const priceText = single ? money(one) : `${money(quote.total.low)}–${money(quote.total.high)}`;
 
   const label = quote.volume.sizeLabel.toLowerCase();
   const size = label ? ` (about ${label.endsWith("loads") ? "" : "a "}${label})` : "";

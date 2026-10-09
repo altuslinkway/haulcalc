@@ -55,6 +55,8 @@ describe("estimate edits", () => {
       weightLbs: 30,
     });
     expect(addLine(base, lineForItem(item("tv"))).lines).toHaveLength(4);
+    expect(lineForItem({ id: "dw", name: "Dishwasher", price: 60 })).toMatchObject({ category: "dishwasher" });
+    expect(lineForItem({ id: "bf", name: "Bed frame", price: 40 })).toMatchObject({ category: "bed_frame" });
   });
 
   it("sizes a new line from its item type", () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { MAX_PHOTOS } from "@/lib/ai/limits";
 import { postJson } from "@/lib/client/api";
@@ -8,12 +9,12 @@ import { saveJob } from "@/lib/client/jobsStore";
 import { preparePhoto, type Photo } from "@/lib/client/photos";
 import { useSettings } from "@/lib/client/settingsStore";
 import { DEFAULT_DETAILS, TRAILERS } from "@/lib/pricing/defaults";
-import { computeQuote, LOAD_SIZES, rangeFactors } from "@/lib/pricing/engine";
-import { scaleLoadTo } from "@/lib/pricing/estimate";
+import { capacityOf, computeQuote, LOAD_SIZES } from "@/lib/pricing/engine";
+import { setLoadSize } from "@/lib/pricing/estimate";
 import { buildPhotoRequestMessage, buildQuoteMessage, type QuoteStyle } from "@/lib/pricing/message";
 import type { JobDetails, JobEstimate, Quote, Settings } from "@/lib/pricing/types";
 import { ItemsEditor } from "./ItemsEditor";
-import { buttonClass, Card, money, moneyRange, NumberField, Segmented, Stepper, TextArea, TextField } from "./ui";
+import { buttonClass, Card, money, moneyRange, NumberField, PageTitle, Segmented, Stepper, TextArea, TextField } from "./ui";
 
 export function QuoteFlow() {
   const settings = useSettings();
@@ -63,7 +64,7 @@ export function QuoteFlow() {
         customerNotes: notes,
         trailer: {
           name: TRAILERS.find((t) => t.id === settings.trailer.preset)?.label.toLowerCase() ?? "trailer",
-          cubicYards: settings.trailer.cubicYards,
+          cubicYards: capacityOf(settings),
         },
         flatItems: settings.flatItems.map(({ id, name }) => ({ id, name })),
         prohibitedItems: settings.prohibitedItems,
@@ -106,7 +107,7 @@ export function QuoteFlow() {
       sentPrice,
       aiCubicYards: totalCy(aiEstimate),
       quotedCubicYards: totalCy(estimate),
-      trailerCubicYards: settings.trailer.cubicYards,
+      trailerCubicYards: capacityOf(settings),
       calibrationPct: quote.volume.calibrationPct,
       shared,
       outcome: null,
@@ -117,7 +118,7 @@ export function QuoteFlow() {
         quote: {
           scope: aiEstimate.scope,
           confidence: aiEstimate.confidence,
-          trailerCubicYards: settings.trailer.cubicYards,
+          trailerCubicYards: capacityOf(settings),
           aiLines: toFeedbackLines(aiEstimate.lines),
           sentLines: toFeedbackLines(estimate.lines),
           calibrationPct: quote.volume.calibrationPct,
@@ -128,24 +129,31 @@ export function QuoteFlow() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-[32px] leading-none font-bold tracking-[-0.015em]">New quote</h1>
-        <button
-          type="button"
-          aria-expanded={askOpen}
-          onClick={() => setAskOpen((o) => !o)}
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3.5 text-sm font-bold"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M4 5h16v11H8l-4 4z" />
-          </svg>
-          Ask for photos
-        </button>
-      </div>
-      {askOpen && <PhotoRequest settings={settings} />}
+      <PageTitle
+        eyebrow="New quote"
+        title="Price a job."
+        action={
+          <button
+            type="button"
+            aria-expanded={askOpen}
+            onClick={() => setAskOpen((o) => !o)}
+            className="mb-0.5 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-stone-900 px-4 text-sm font-bold text-stone-100"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 5h16v11H8l-4 4z" />
+            </svg>
+            Ask for photos
+          </button>
+        }
+      />
+      {askOpen && <PhotoRequest settings={settings} onClose={() => setAskOpen(false)} />}
 
-      <Card title="Customer photos" subtitle="Add the pictures your customer sent. More angles = better estimate.">
-        <div className="grid grid-cols-3 gap-2">
+      <Card
+        title="Customer photos"
+        subtitle="The pictures your customer sent. More angles, better price."
+        action={photos.length > 0 && <span className="pt-1 text-sm whitespace-nowrap text-stone-500 tabular-nums">{photos.length} of {MAX_PHOTOS}</span>}
+      >
+        <div className="grid grid-cols-4 gap-2">
           {photos.map((p, i) => (
             <div key={p.id} className="relative aspect-square overflow-hidden rounded-[14px] bg-stone-200">
               {/* eslint-disable-next-line @next/next/no-img-element -- local data URL preview */}
@@ -167,13 +175,15 @@ export function QuoteFlow() {
               type="button"
               onClick={() => fileInput.current?.click()}
               disabled={busy !== null}
-              className="flex aspect-square flex-col items-center justify-center gap-1 rounded-[14px] border-2 border-dashed border-stone-400 text-stone-600 active:bg-stone-50"
+              className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-[14px] border-2 border-dashed border-stone-400 bg-stone-50 text-stone-600 active:bg-stone-100 ${
+                photos.length === 0 ? "col-span-4 aspect-auto min-h-28" : ""
+              }`}
             >
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
                 <path d="M12 10v6M9 13h6" />
               </svg>
-              <span className="text-[13px] font-semibold">{busy === "photos" ? "Loading…" : "Add photos"}</span>
+              <span className="text-[13px] font-bold">{busy === "photos" ? "Loading…" : photos.length === 0 ? "Add the customer's photos" : "Add"}</span>
             </button>
           )}
         </div>
@@ -187,32 +197,54 @@ export function QuoteFlow() {
         />
       </Card>
 
-      <Card title="Job details">
+      <Card>
         <div className="space-y-3">
-          <TextArea
-            label="What the customer said"
-            placeholder="e.g. Everything in the garage plus a mattress upstairs. Easy driveway access."
-            value={notes}
-            onChange={setNotes}
-            rows={3}
-          />
           <div className="grid grid-cols-2 gap-3">
             <TextField
-              label="Customer name"
-              placeholder="Optional"
+              label="Customer"
+              placeholder="Name"
               value={details.customerName}
               onChange={(v) => setDetail("customerName", v)}
             />
             <NumberField
-              label="Distance"
+              label="Miles away"
               suffix="mi"
               value={details.distanceMiles}
               onChange={(v) => setDetail("distanceMiles", v)}
-              hint="One way from your base"
             />
           </div>
+          <TextArea
+            label="What they said"
+            placeholder="e.g. Everything in the garage plus a mattress upstairs."
+            value={notes}
+            onChange={setNotes}
+            rows={2}
+          />
         </div>
       </Card>
+
+      {!askOpen && (
+        <button
+          type="button"
+          onClick={() => {
+            setAskOpen(true);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          className="flex min-h-[52px] w-full items-center justify-between gap-3 rounded-2xl border border-accent-line bg-accent-soft px-4 py-2 text-left"
+        >
+          <span>
+            <span className="block text-[15px] font-bold">
+              {settings.standardQuestions.length > 0
+                ? `Your ${settings.standardQuestions.length} customer question${settings.standardQuestions.length === 1 ? "" : "s"}`
+                : "Ask the customer for photos"}
+            </span>
+            <span className="block text-[13px] text-accent-deep">Sent with every photo request</span>
+          </span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="text-accent-deep" aria-hidden="true">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+      )}
 
       {error && (
         <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -240,10 +272,16 @@ export function QuoteFlow() {
 
       {estimate && quote && (
         <div ref={resultsRef} className="scroll-mt-20 space-y-4 pt-2">
-          <PriceHero quote={quote} estimate={estimate} settings={settings} customerName={details.customerName} demo={demo} />
+          <PriceHero
+            quote={quote}
+            estimate={estimate}
+            settings={settings}
+            customerName={details.customerName}
+            demo={demo}
+            onChange={setEstimate}
+          />
           {quote.warnings.length > 0 && <Warnings warnings={quote.warnings} />}
           <WhatWeSaw estimate={estimate} />
-          <Adjust settings={settings} estimate={estimate} onChange={setEstimate} details={details} onDetailsChange={setDetails} />
           <ItemsEditor
             settings={settings}
             estimate={estimate}
@@ -257,6 +295,7 @@ export function QuoteFlow() {
                 : undefined
             }
           />
+          <Adjust estimate={estimate} onChange={setEstimate} details={details} onDetailsChange={setDetails} />
           <Breakdown quote={quote} settings={settings} />
           <CustomerMessage
             settings={settings}
@@ -300,16 +339,33 @@ function CopyButton({ text, label = "Copy", onCopied }: { text: string; label?: 
   );
 }
 
-function PhotoRequest({ settings }: { settings: Settings }) {
+function PhotoRequest({ settings, onClose }: { settings: Settings; onClose: () => void }) {
   const message = buildPhotoRequestMessage(settings);
   return (
     <section className="rounded-[20px] border border-stone-200 bg-white p-4">
-      <h2 className="font-display text-xl font-bold">Text this to your customer</h2>
-      <p className="mt-1 text-sm text-stone-600">
-        Good photos and answers up front make the price hold on site. Edit the questions in My rates.
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-[22px] leading-tight font-bold">Ask for photos</h2>
+          <p className="mt-0.5 text-sm text-stone-500">Good photos and answers up front mean the price holds on site.</p>
+        </div>
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={onClose}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-stone-100 text-stone-700"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+      <p className="mt-3 ml-auto max-w-[94%] rounded-[22px_22px_6px_22px] bg-accent px-4 py-3 text-[15px] leading-snug whitespace-pre-wrap text-stone-900">
+        {message}
       </p>
-      <pre className="mt-3 rounded-xl bg-stone-50 p-3 font-sans text-sm whitespace-pre-wrap text-stone-800">{message}</pre>
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <Link href="/settings" className="mt-2 inline-flex min-h-11 items-center text-sm font-bold text-accent-deep">
+        Edit your {settings.standardQuestions.length === 1 ? "question" : "questions"} in My rates
+      </Link>
+      <div className="mt-1 grid grid-cols-2 gap-2">
         <CopyButton text={message} />
         <a className={buttonClass.secondary} href={`sms:?&body=${encodeURIComponent(message)}`}>
           Text it
@@ -331,20 +387,24 @@ function PriceHero({
   settings,
   customerName,
   demo,
+  onChange,
 }: {
   quote: Quote;
   estimate: JobEstimate;
   settings: Settings;
   customerName: string;
   demo: boolean;
+  onChange: (e: JobEstimate) => void;
 }) {
-  const capacity = settings.trailer.cubicYards;
+  const capacity = capacityOf(settings);
   const fillLow = Math.min(1, quote.volume.totalCubicYards.low / capacity);
   const fillHigh = Math.min(1, quote.volume.totalCubicYards.high / capacity);
   const range = quote.total.low !== quote.total.high;
+  const picked = estimate.sizedByOwner
+    ? LOAD_SIZES.find((s) => Math.abs(quote.volume.trailerFraction.high - s.fraction) < 0.005)?.key
+    : undefined;
   const notes = [
     quote.volume.loads > 1 ? `About ${quote.volume.loads} trailer loads` : "",
-    quote.volume.unseenPct > 0 ? `Leaves room for ${quote.volume.unseenPct}% more than the photos show` : "",
     quote.volume.calibrationPct !== 0
       ? `${quote.volume.calibrationPct > 0 ? "+" : ""}${quote.volume.calibrationPct}% learned from ${
           quote.volume.calibrationSource === "owner" ? "your" : "all owners'"
@@ -354,9 +414,9 @@ function PriceHero({
   ].filter(Boolean);
 
   return (
-    <section className="rounded-[22px] bg-stone-900 p-5 text-stone-100">
+    <section className="rounded-3xl bg-stone-900 p-5 text-stone-100">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-stone-400">{customerName.trim() ? `Quote for ${customerName.trim()}` : "Quote"}</span>
+        <span className="text-sm text-stone-400">{customerName.trim() ? `Quote for ${customerName.trim()}` : "Your price"}</span>
         <div className="flex gap-1.5">
           {demo && <span className="rounded-full bg-sky-200 px-2.5 py-0.5 text-xs font-bold text-sky-950">Demo data</span>}
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${confidenceStyle[estimate.confidence]}`}>
@@ -364,26 +424,56 @@ function PriceHero({
           </span>
         </div>
       </div>
-      <p className="mt-1 text-[40px] leading-tight font-bold tracking-tight tabular-nums">
+      <p className="mt-2 font-display text-[52px] leading-none font-extrabold tracking-[-0.02em] tabular-nums">
         {moneyRange(quote.total.low, quote.total.high)}
       </p>
-      <p className="text-sm text-stone-300">
-        {quote.volume.sizeLabel || "Flat-rate items only"}
-        {range && `, middle of the range ${money(quote.suggested)}`}
+      <p className="mt-1 text-[15px] text-stone-300">
+        {quote.volume.sizeLabel || (estimate.lines.length > 0 ? "Flat-rate items only" : "Nothing listed yet")}
+        {range && `, or quote one price: ${money(quote.suggested)}`}
       </p>
       <div className="mt-4">
-        <div className="relative h-2.5 overflow-hidden rounded-full bg-stone-700" aria-hidden>
+        <div className="relative h-3 overflow-hidden rounded-full bg-stone-700" aria-hidden>
           <div className="absolute inset-y-0 left-0 bg-accent/45" style={{ width: `${fillHigh * 100}%` }} />
           <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${fillLow * 100}%` }} />
         </div>
-        <p className="mt-1.5 text-xs text-stone-400">
-          Trailer space {pct(quote.volume.totalCubicYards.low / capacity)}–{pct(quote.volume.totalCubicYards.high / capacity)}
+        <p className="mt-1.5 flex justify-between gap-2 text-xs text-stone-400">
+          <span>
+            {pct(quote.volume.totalCubicYards.low / capacity) === pct(quote.volume.totalCubicYards.high / capacity)
+              ? `Trailer ${pct(quote.volume.totalCubicYards.high / capacity)} full`
+              : `Trailer ${pct(quote.volume.totalCubicYards.low / capacity)} to ${pct(quote.volume.totalCubicYards.high / capacity)} full`}
+          </span>
+          {quote.volume.unseenPct > 0 && <span>Leaves room for {quote.volume.unseenPct}% more</span>}
         </p>
         {notes.map((n) => (
           <p key={n} className="text-xs text-stone-400">
             {n}
           </p>
         ))}
+      </div>
+      <div className="mt-4 border-t border-stone-700 pt-3">
+        <p className="mb-2 text-sm font-semibold">Know better? It&apos;s really about a…</p>
+        <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="Set the load size">
+          {LOAD_SIZES.map((size) => (
+            <button
+              key={size.key}
+              type="button"
+              aria-pressed={picked === size.key}
+              className={`min-h-12 rounded-xl text-[17px] font-extrabold ${
+                picked === size.key
+                  ? "border-2 border-accent bg-accent text-stone-900"
+                  : "border border-stone-600 bg-stone-800 text-stone-100 active:bg-stone-700"
+              }`}
+              onClick={() => onChange(setLoadSize(estimate, settings, size.fraction))}
+            >
+              {size.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-xs text-stone-400">
+          {estimate.sizedByOwner
+            ? "Priced at exactly the size you picked. Flat-rate items keep their own price."
+            : "Flat-rate items keep their own price."}
+        </p>
       </div>
     </section>
   );
@@ -413,11 +503,11 @@ function Warnings({ warnings }: { warnings: string[] }) {
 function WhatWeSaw({ estimate }: { estimate: JobEstimate }) {
   return (
     <Card title="What the AI saw">
-      <p className="text-sm text-stone-700">{estimate.summary}</p>
+      <p className="text-[15px] leading-relaxed text-stone-700">{estimate.summary}</p>
       {estimate.accessNotes && <p className="mt-2 text-sm text-stone-500">Access: {estimate.accessNotes}</p>}
       {estimate.questionsForCustomer.length > 0 && (
-        <div className="mt-3 rounded-lg bg-stone-50 p-3">
-          <p className="text-xs font-semibold tracking-wide text-stone-500 uppercase">Worth asking the customer</p>
+        <div className="mt-3 rounded-xl bg-stone-100 p-3">
+          <p className="text-xs font-bold tracking-[0.1em] text-stone-500 uppercase">Worth asking</p>
           <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-stone-700">
             {estimate.questionsForCustomer.map((q) => (
               <li key={q}>{q}</li>
@@ -430,46 +520,22 @@ function WhatWeSaw({ estimate }: { estimate: JobEstimate }) {
 }
 
 function Adjust({
-  settings,
   estimate,
   onChange,
   details,
   onDetailsChange,
 }: {
-  settings: Settings;
   estimate: JobEstimate;
   onChange: (e: JobEstimate) => void;
   details: JobDetails;
   onDetailsChange: (d: JobDetails) => void;
 }) {
-  const capacity = settings.trailer.cubicYards;
-
   return (
-    <Card title="Fix the size" subtitle="Know better than the AI? Tap it. The price updates as you go.">
-      <div className="space-y-5">
-        <div>
-          <p className="mb-2 text-sm font-medium text-stone-700">It&apos;s really about a…</p>
-          <div className="grid grid-cols-4 gap-2">
-            {LOAD_SIZES.map((size) => (
-              <button
-                key={size.key}
-                type="button"
-                className="min-h-12 rounded-[14px] border border-stone-300 bg-white text-base font-bold text-stone-900 active:bg-stone-100"
-                // The size tapped becomes the top of the range, so the quote reads as that load.
-                onClick={() =>
-                  onChange(scaleLoadTo(estimate, settings, (size.fraction * capacity) / rangeFactors(settings, estimate).high))
-                }
-              >
-                {size.label}
-              </button>
-            ))}
-          </div>
-          <p className="mt-1 text-xs text-stone-500">Flat-rate items keep their own price.</p>
-        </div>
-
+    <Card>
+      <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm text-stone-900">Flights of stairs</p>
+            <p className="text-[15px] font-semibold text-stone-900">Flights of stairs</p>
             <p className="text-xs text-stone-500">{details.stairsFlights === null ? "From the photos" : "Set by you"}</p>
           </div>
           <Stepper
@@ -481,14 +547,14 @@ function Adjust({
 
         {estimate.prohibitedItems.length > 0 && (
           <div>
-            <p className="mb-1 text-sm font-medium text-stone-700">Flagged as prohibited</p>
+            <p className="mb-1 text-sm font-semibold text-stone-700">Flagged as something you won&apos;t take</p>
             <ul className="space-y-1.5">
               {estimate.prohibitedItems.map((p, i) => (
-                <li key={`${p.name}-${i}`} className="flex items-center justify-between gap-3 rounded-lg bg-red-50 px-3 py-2">
+                <li key={`${p.name}-${i}`} className="flex items-center justify-between gap-3 rounded-xl bg-red-50 px-3 py-1">
                   <span className="text-sm text-red-900">{p.name}</span>
                   <button
                     type="button"
-                    className="min-h-11 text-xs font-semibold text-red-700"
+                    className="min-h-11 text-xs font-bold text-red-700"
                     onClick={() =>
                       onChange({ ...estimate, prohibitedItems: estimate.prohibitedItems.filter((_, j) => j !== i) })
                     }
@@ -506,13 +572,13 @@ function Adjust({
 }
 
 function Breakdown({ quote, settings }: { quote: Quote; settings: Settings }) {
-  const row = "flex justify-between gap-3 py-1.5 text-sm";
+  const row = "flex justify-between gap-3 py-2 text-[15px]";
   const { costs } = quote;
   return (
-    <Card title="Price breakdown">
-      <ul className="divide-y divide-stone-100">
+    <Card title="How the price adds up">
+      <ul>
         {quote.lines.map((l, i) => (
-          <li key={`${l.label}-${i}`} className={row}>
+          <li key={`${l.label}-${i}`} className={`${row} border-b border-stone-100`}>
             <div className="min-w-0">
               <p className="text-stone-900">{l.label}</p>
               <p className="text-xs text-stone-500">{l.detail}</p>
@@ -521,29 +587,34 @@ function Breakdown({ quote, settings }: { quote: Quote; settings: Settings }) {
           </li>
         ))}
         {quote.minimumApplied && (
-          <li className={row}>
+          <li className={`${row} border-b border-stone-100`}>
             <span className="text-stone-600">Raised to your minimum</span>
             <span className="tabular-nums">{money(settings.minimumCharge)}</span>
           </li>
         )}
-        <li className={`${row} font-semibold`}>
+        <li className={`${row} mt-1 border-t-2 border-stone-900 text-[17px] font-extrabold`}>
           <span>Total</span>
           <span className="tabular-nums">{moneyRange(quote.total.low, quote.total.high)}</span>
         </li>
       </ul>
 
-      <details className="mt-4 rounded-xl bg-stone-50 p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-stone-800">
-          You&apos;d keep about {moneyRange(quote.keep.low, quote.keep.high)}
-        </summary>
-        <ul className="mt-2 divide-y divide-stone-200 text-sm">
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-[#e8f5ec] px-3.5 py-3 text-[#14532d]">
+        <span>
+          <span className="block text-sm font-semibold">You keep about</span>
+          <span className="block text-xs text-[#2f6b46]">after dump fees, gas{settings.costs.helpers > 0 ? " and helper pay" : ""}</span>
+        </span>
+        <span className="font-display text-2xl font-extrabold whitespace-nowrap tabular-nums">{moneyRange(quote.keep.low, quote.keep.high)}</span>
+      </div>
+      <details className="mt-2">
+        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-bold text-accent-deep">Your costs on this job</summary>
+        <ul className="divide-y divide-stone-100 text-sm">
           <CostRow label="Dump fees" value={costs.dump} />
           <CostRow label="Gas" value={costs.gas} />
           {settings.costs.helpers > 0 && (
             <CostRow label={settings.costs.helpers === 1 ? "Your helper" : `${settings.costs.helpers} helpers`} value={costs.helpers} />
           )}
         </ul>
-        <p className="mt-2 text-xs text-stone-500">Rough numbers from Your costs in My rates.</p>
+        <p className="mt-1 text-xs text-stone-500">Rough numbers from Your costs in My rates.</p>
       </details>
     </Card>
   );

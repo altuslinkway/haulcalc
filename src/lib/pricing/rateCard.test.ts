@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RateCard } from "@/lib/ai/schemas";
 import { DEFAULT_SETTINGS } from "./defaults";
-import { applyRateCard } from "./rateCard";
+import { applyRateCard, freshId } from "./rateCard";
 
 const card: RateCard = {
   business_name: "Haul Pros",
@@ -45,6 +45,23 @@ describe("applyRateCard", () => {
     expect(s.loadPrices.threeQuarter).toBeGreaterThan(350);
     expect(s.loadPrices.threeQuarter).toBeLessThan(650);
     expect(s.loadPrices.quarter % 5).toBe(0);
+  });
+
+  it("fills a missing size between its neighbours, never above the next size up", () => {
+    const s = applyRateCard(DEFAULT_SETTINGS, { ...card, half_load: null, three_quarter_load: null, quarter_load: 300, full_load: 500 });
+    expect(s.loadPrices.quarter).toBe(300);
+    expect(s.loadPrices.half).toBeGreaterThan(300);
+    expect(s.loadPrices.threeQuarter).toBeGreaterThan(s.loadPrices.half);
+    expect(s.loadPrices.threeQuarter).toBeLessThanOrEqual(500);
+  });
+
+  it("keeps an item's id when the card has the same item, so open quotes stay matched", () => {
+    const s = applyRateCard(DEFAULT_SETTINGS, { ...card, items: [{ name: "fridge or freezer", price: 150 }] });
+    expect(s.flatItems).toEqual([{ id: "fridge", name: "fridge or freezer", price: 150 }]);
+  });
+
+  it("makes ids that never collide", () => {
+    expect(freshId("TV", ["tv", "tv-2"])).toBe("tv-3");
   });
 
   it("keeps the owner's prices when the card has none, and never lets the minimum pass a quarter load", () => {

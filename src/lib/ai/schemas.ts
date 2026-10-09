@@ -15,9 +15,11 @@ export const PhotoAnalysisSchema = z.object({
     .array(
       z.object({
         description: z.string(),
-        quantity: z.number(),
-        cubic_yards_total: z.number().describe("Trailer space for the whole line, as loaded."),
-        weight_lbs_total: z.number().describe("Weight of the whole line."),
+        quantity: z.number().describe("How many pieces this line counts (1 for a pile)."),
+        cubic_yards_total: z
+          .number()
+          .describe("Trailer space for ALL pieces on this line together, as loaded (e.g. 14 boxes at 0.1 each = 1.4)."),
+        weight_lbs_total: z.number().describe("Weight of ALL pieces on this line together, in pounds."),
         material: MaterialSchema,
         category: z.enum(CATEGORY_IDS).describe("The item type from the reference guide that best fits this line."),
         flat_rate_item_id: z

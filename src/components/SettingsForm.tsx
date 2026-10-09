@@ -8,9 +8,9 @@ import { preparePhoto } from "@/lib/client/photos";
 import { saveSettings, useSettings } from "@/lib/client/settingsStore";
 import { DEFAULT_SETTINGS, TRAILERS } from "@/lib/pricing/defaults";
 import { LOAD_SIZES } from "@/lib/pricing/engine";
-import { applyRateCard, uniqueIds } from "@/lib/pricing/rateCard";
+import { applyRateCard, freshId } from "@/lib/pricing/rateCard";
 import type { Settings, TrailerPreset } from "@/lib/pricing/types";
-import { buttonClass, Card, money, NumberField, Select, Stepper, TextField, Toggle } from "./ui";
+import { buttonClass, Card, money, NumberField, PageTitle, Select, Stepper, TextField, Toggle } from "./ui";
 
 type Update = (fn: (draft: Settings) => void) => void;
 
@@ -30,18 +30,16 @@ export function SettingsForm() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-display text-[32px] leading-none font-bold tracking-[-0.015em]">My rates</h1>
-        <p className="mt-1 text-sm text-stone-500">Changes save automatically on this phone.</p>
-      </div>
+      <PageTitle eyebrow="Saved on this phone" title="My rates." />
 
       <RateCardImport settings={settings} />
 
       <Card title="Load prices" subtitle="What you charge for part of your trailer. Sizes in between are priced in between.">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2.5">
           {LOAD_SIZES.map((size) => (
             <NumberField
               key={size.key}
+              big
               label={`${size.label} load`}
               prefix="$"
               value={settings.loadPrices[size.key]}
@@ -49,6 +47,11 @@ export function SettingsForm() {
             />
           ))}
         </div>
+        {LOAD_SIZES.some((size, i) => i > 0 && settings.loadPrices[size.key] < settings.loadPrices[LOAD_SIZES[i - 1].key]) && (
+          <p className="mt-2 rounded-xl bg-[#fff1d6] px-3 py-2 text-sm text-[#4d3300]">
+            A bigger load is priced lower than a smaller one. Quotes use the higher price until you fix it.
+          </p>
+        )}
         <div className="mt-3">
           <NumberField
             label="Minimum charge"
@@ -159,6 +162,16 @@ export function SettingsForm() {
         )}
       </Card>
 
+      <Card>
+        <ListEditor
+          title="Questions for every customer"
+          subtitle="Sent with every photo request (Ask for photos on the Quote screen)."
+          items={settings.standardQuestions}
+          placeholder="Add a question"
+          onChange={(items) => update((s) => void (s.standardQuestions = items))}
+        />
+      </Card>
+
       <details className="group rounded-[20px] border border-stone-200 bg-white">
         <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between px-4 font-display text-xl font-bold">
           More settings
@@ -181,14 +194,6 @@ export function SettingsForm() {
             placeholder="Add an item, like tires"
             chips
             onChange={(items) => update((s) => void (s.prohibitedItems = items))}
-          />
-
-          <ListEditor
-            title="Questions for every customer"
-            subtitle="Sent with the photo request on the Quote screen."
-            items={settings.standardQuestions}
-            placeholder="Add a question"
-            onChange={(items) => update((s) => void (s.standardQuestions = items))}
           />
 
           <Learning settings={settings} update={update} />
@@ -215,10 +220,7 @@ function FlatItems({ settings, update }: { settings: Settings; update: Update })
     const n = name.trim();
     const p = Number(price.replace(/[$,\s]/g, ""));
     if (!n || !Number.isFinite(p) || p < 0) return;
-    update((s) => {
-      const ids = uniqueIds([...s.flatItems.map((i) => i.id), n]);
-      s.flatItems.push({ id: ids.at(-1)!, name: n, price: Math.round(p) });
-    });
+    update((s) => void s.flatItems.push({ id: freshId(n, s.flatItems.map((i) => i.id)), name: n, price: Math.round(p) }));
     setName("");
     setPrice("");
   };
@@ -440,20 +442,20 @@ function RateCardImport({ settings }: { settings: Settings }) {
     : null;
 
   return (
-    <Card
-      title="Import your rate card"
-      subtitle="Snap a photo of your price sheet, trailer sign or flyer. You'll check it before anything changes."
-      className="border-accent-line bg-accent-soft"
-    >
+    <section className="rounded-3xl bg-stone-900 p-4 text-stone-100">
+      <h2 className="font-display text-[22px] leading-tight font-extrabold">Have a rate card?</h2>
+      <p className="mt-0.5 mb-3 text-sm text-stone-300">
+        Snap your price sheet, trailer sign or flyer. You check everything before it&apos;s saved.
+      </p>
       <button type="button" className={`${buttonClass.primary} w-full`} disabled={busy} onClick={() => fileInput.current?.click()}>
         {busy ? "Reading your rate card…" : "Upload rate card photos"}
       </button>
       <input ref={fileInput} type="file" accept="image/*" multiple className="hidden" onChange={(e) => read(e.target.files)} />
-      {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
 
       {card && next && onCard && (
-        <div className="mt-4 space-y-3 rounded-xl bg-white p-3 text-sm">
-          <p className="font-semibold text-stone-900">Here&apos;s what I found:</p>
+        <div className="mt-4 space-y-3 rounded-2xl bg-white p-3 text-sm text-stone-900">
+          <p className="font-semibold">Here&apos;s what I found:</p>
           <ul className="space-y-0.5">
             {LOAD_SIZES.map((size) => (
               <li key={size.key} className="flex justify-between gap-2">
@@ -511,6 +513,6 @@ function RateCardImport({ settings }: { settings: Settings }) {
           </div>
         </div>
       )}
-    </Card>
+    </section>
   );
 }

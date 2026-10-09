@@ -8,7 +8,7 @@ import type { JobRating, LearnedModel } from "@/lib/learning/learn";
 import { categoryById } from "@/lib/pricing/categories";
 import { calibrate, MIN_JOBS_FOR_CALIBRATION } from "@/lib/pricing/calibration";
 import type { Settings } from "@/lib/pricing/types";
-import { buttonClass, Card, money, moneyRange } from "./ui";
+import { buttonClass, Card, money, moneyRange, PageTitle } from "./ui";
 
 const RATINGS: { value: JobRating; label: string }[] = [
   { value: "much_smaller", label: "Much smaller" },
@@ -35,9 +35,9 @@ export function JobsList() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-[32px] leading-none font-bold tracking-[-0.015em]">Jobs</h1>
-        <p className="mt-1 text-sm text-stone-500">
-          Quotes you&apos;ve sent. After each job, tap how it compared to the estimate. That&apos;s how estimates get better.
+        <PageTitle eyebrow="Quotes you've sent" title="Jobs." />
+        <p className="mt-2 text-sm text-stone-500">
+          After each job, tap how it compared to the estimate. That&apos;s how estimates get better.
         </p>
       </div>
 

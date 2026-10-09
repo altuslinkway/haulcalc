@@ -1,5 +1,5 @@
 import { categoryById, guessCategory, type ItemCategoryId } from "./categories";
-import { flatItemFor } from "./engine";
+import { capacityOf, flatItemFor } from "./engine";
 import type { EstimateLine, FlatItem, JobEstimate, Settings } from "./types";
 
 // Edits the owner makes to an estimate. Each returns a new estimate so the
@@ -16,15 +16,15 @@ export function removeLine(estimate: JobEstimate, id: string): JobEstimate {
   return { ...estimate, lines: estimate.lines.filter((l) => l.id !== id) };
 }
 
-/** Changing a count keeps the size and weight of each unit the same. */
+/** Changing a count keeps the size and weight of each unit the same (unrounded, so counting down and back up loses nothing). */
 export function setLineQuantity(estimate: JobEstimate, id: string, quantity: number): JobEstimate {
   const line = estimate.lines.find((l) => l.id === id);
   if (!line || quantity < 1) return estimate;
-  const per = line.quantity > 0 ? 1 / line.quantity : 1;
+  const ratio = quantity / Math.max(1, line.quantity);
   return updateLine(estimate, id, {
     quantity,
-    cubicYards: round2(line.cubicYards * per * quantity),
-    weightLbs: Math.round(line.weightLbs * per * quantity),
+    cubicYards: line.cubicYards * ratio,
+    weightLbs: line.weightLbs * ratio,
   });
 }
 
@@ -83,11 +83,16 @@ export function scaleLoadTo(estimate: JobEstimate, settings: Settings, targetCub
   return {
     ...estimate,
     lines: estimate.lines.map((l) =>
-      flatItemFor(l, settings)
-        ? l
-        : { ...l, cubicYards: l.cubicYards * ratio, weightLbs: Math.round(l.weightLbs * ratio) },
+      flatItemFor(l, settings) ? l : { ...l, cubicYards: l.cubicYards * ratio, weightLbs: l.weightLbs * ratio },
     ),
   };
 }
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+/**
+ * The owner taps "it's really a 1/2 load": everything charged by the load is
+ * resized to exactly that, and the quote prices that size with no range on
+ * top. Shared learning sees the owner's size as the right answer.
+ */
+export function setLoadSize(estimate: JobEstimate, settings: Settings, fraction: number): JobEstimate {
+  return { ...scaleLoadTo(estimate, settings, fraction * capacityOf(settings)), sizedByOwner: true };
+}

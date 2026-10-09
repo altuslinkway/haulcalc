@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_DETAILS, DEFAULT_SETTINGS } from "./defaults";
-import { computeQuote, loadPrice, rangeFactors, sizeLabel } from "./engine";
-import { scaleLoadTo } from "./estimate";
+import { capacityOf, computeQuote, loadPrice, rangeFactors, sizeLabel } from "./engine";
+import { scaleLoadTo, setLineQuantity, setLoadSize } from "./estimate";
 import { buildPhotoRequestMessage, buildQuoteMessage } from "./message";
 import type { EstimateLine, JobDetails, JobEstimate, Settings } from "./types";
 
@@ -69,6 +69,18 @@ describe("loadPrice", () => {
 
   it("never starts the line above the quarter price", () => {
     expect(loadPrice(0.125, { ...DEFAULT_SETTINGS, minimumCharge: 400 })).toBe(255);
+  });
+
+  it("never charges less for a bigger load, even with prices typed out of order", () => {
+    const s = { ...DEFAULT_SETTINGS, loadPrices: { quarter: 255, half: 200, threeQuarter: 595, full: 765 } };
+    expect(loadPrice(0.5, s)).toBe(255);
+    expect(loadPrice(0.4, s)).toBe(255);
+    expect(loadPrice(0.625, s)).toBeGreaterThan(255);
+  });
+
+  it("agrees with the load label right at a full trailer", () => {
+    expect(price(1.0008)).toBe(765);
+    expect(sizeLabel({ low: 1.0008, high: 1.0008 })).toBe("Full load");
   });
 });
 
@@ -158,6 +170,52 @@ describe("computeQuote: the price", () => {
     expect(computeQuote(s, estimate({ lines: [line(), fridge()] }), details).total).toEqual(byLoad.total);
   });
 
+  it("prices exactly the size the owner picks, with no range on top", () => {
+    const s = settings();
+    s.calibrationPct = 20;
+    const e = setLoadSize(estimate({ confidence: "low", lines: [line(), fridge()] }), s, 0.5);
+    const q = computeQuote(s, e, details);
+    expect(q.volume.sizeLabel).toBe("1/2 load");
+    expect(q.volume.unseenPct).toBe(0);
+    expect(q.volume.calibrationSource).toBeNull();
+    expect(q.total).toEqual({ low: 430 + 170, high: 430 + 170 });
+    // What gets learned is the owner's size: half of the trailer.
+    expect(e.lines[0].cubicYards).toBeCloseTo(7.5);
+  });
+
+  it("keeps a line's size when its count goes down and back up", () => {
+    let e = estimate({ lines: [line({ id: "piles", quantity: 200, cubicYards: 0.8, weightLbs: 80 })] });
+    e = setLineQuantity(setLineQuantity(e, "piles", 1), "piles", 200);
+    expect(e.lines[0].cubicYards).toBeCloseTo(0.8);
+    expect(e.lines[0].weightLbs).toBeCloseTo(80);
+  });
+
+  it("treats a blank or zero trailer size as 1 yd³ everywhere", () => {
+    const s = settings();
+    s.trailer.cubicYards = 0;
+    expect(capacityOf(s)).toBe(1);
+    const q = computeQuote(s, setLoadSize(estimate(), s, 1), details);
+    expect(q.total.high).toBe(765);
+  });
+
+  it("caps a typed or learned correction at sensible limits", () => {
+    const s = settings();
+    s.calibrationPct = -100;
+    const q = computeQuote(s, estimate(), details);
+    expect(q.volume.calibrationPct).toBe(-50);
+    expect(q.volume.cubicYards.low).toBeGreaterThan(0);
+    expect(lineAmount(q, "Heavy load")).toBeUndefined();
+    expect(computeQuote(settings(), estimate({ networkCalibrationPct: 900 }), details).volume.calibrationPct).toBe(200);
+  });
+
+  it("only says the minimum applied when the rounded total was under it", () => {
+    const tv = line({ description: "TV", cubicYards: 0.25, weightLbs: 40, itemId: "tv" });
+    const q = computeQuote(settings(), estimate({ lines: [tv] }), { ...details, distanceMiles: 37 });
+    // $50 TV + $48 travel rounds to $100.
+    expect(q.total).toEqual({ low: 100, high: 100 });
+    expect(q.minimumApplied).toBe(false);
+  });
+
   it("never goes below the minimum charge", () => {
     const tv = line({ description: "TV", cubicYards: 0.25, weightLbs: 40, itemId: "tv" });
     const q = computeQuote(settings(), estimate({ lines: [tv] }), details);
@@ -180,9 +238,9 @@ describe("computeQuote: the price", () => {
   });
 
   it("charges heavy loads by the ton, at least twice the dump fee", () => {
-    // A quarter trailer of concrete: 200 lbs a yard is included, the rest is $150 a ton.
+    // A quarter trailer of concrete: 300 lbs a yard is included, the rest is $150 a ton.
     const concrete = estimate({ lines: [line({ cubicYards: 3.75, weightLbs: 7500, material: "dense" })] });
-    const over = (cy: number, lbs: number) => (lbs - cy * 200) / 2000;
+    const over = (cy: number, lbs: number) => (lbs - cy * 300) / 2000;
     expect(lineAmount(computeQuote(settings(), concrete, details), "Heavy load")).toEqual({
       low: Math.round(over(3.5625, 7125) * 150),
       high: Math.round(over(4.33125, 8662.5) * 150),
@@ -268,6 +326,12 @@ describe("messages", () => {
     expect(msg).toContain("$415–$480");
     expect(msg).toContain("we can't take two paint cans and PCBs");
     expect(msg).toContain("Is anything in the back room too?");
+  });
+
+  it("ignores a typed single price once the range is chosen again", () => {
+    const e = estimate({ lines: [fridge()] });
+    const q = computeQuote(settings(), e, details);
+    expect(buildQuoteMessage(settings(), e, details, q, "range", 300)).toContain("your price is $170,");
   });
 
   it("uses a single price when asked, and skips the load size for flat-rate-only jobs", () => {

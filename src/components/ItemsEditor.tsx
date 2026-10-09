@@ -23,7 +23,7 @@ export function ItemsEditor({
 
   return (
     <Card
-      title="Items"
+      title="What's going"
       subtitle="Tap one to change the count, or charge it as a flat-rate item."
       action={
         onReset && (
@@ -99,7 +99,7 @@ function LineRow({
             {line.description}
           </span>
           <span className="flex shrink-0 items-center gap-2 text-sm text-stone-500 tabular-nums">
-            {item && money(item.price * line.quantity)}
+            {item && <span className="font-bold text-stone-900">{money(item.price * line.quantity)}</span>}
             <span aria-hidden className="text-stone-400 transition group-open:rotate-90">
               ›
             </span>

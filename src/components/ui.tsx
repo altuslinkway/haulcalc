@@ -20,7 +20,7 @@ export function Card({
       {(title || action) && (
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            {title && <h2 className="font-display text-xl font-bold text-stone-900">{title}</h2>}
+            {title && <h2 className="font-display text-[22px] leading-tight font-bold text-stone-900">{title}</h2>}
             {subtitle && <p className="mt-0.5 text-sm text-stone-500">{subtitle}</p>}
           </div>
           {action}
@@ -28,6 +28,19 @@ export function Card({
       )}
       {children}
     </section>
+  );
+}
+
+/** Big condensed screen title, like the website's headlines, with an optional small label above. */
+export function PageTitle({ eyebrow, title, action }: { eyebrow?: string; title: string; action?: ReactNode }) {
+  return (
+    <div className="flex items-end justify-between gap-3">
+      <div>
+        {eyebrow && <p className="text-xs font-bold tracking-[0.12em] text-stone-500 uppercase">{eyebrow}</p>}
+        <h1 className="font-display text-[40px] leading-[0.95] font-extrabold tracking-[-0.02em]">{title}</h1>
+      </div>
+      {action}
+    </div>
   );
 }
 
@@ -128,6 +141,7 @@ export function NumberField({
   parse = parseNumber,
   format = String,
   inputMode = "decimal",
+  big = false,
 }: {
   label: string;
   hint?: string;
@@ -139,6 +153,8 @@ export function NumberField({
   parse?: (text: string) => number | null;
   format?: (v: number) => string;
   inputMode?: "decimal" | "numeric" | "text";
+  /** A price tile: large numbers on a tinted ground. */
+  big?: boolean;
 }) {
   const [text, setText] = useState(format(value));
   const [shown, setShown] = useState(value);
@@ -150,12 +166,18 @@ export function NumberField({
   return (
     <Field label={label} hint={hint} hideLabel={hideLabel}>
       {(id) => (
-        <div className="flex items-center rounded-xl border border-stone-300 bg-white focus-within:border-stone-900 focus-within:ring-2 focus-within:ring-accent/40">
-          {prefix && <span className="pl-3 text-stone-500">{prefix}</span>}
+        <div
+          className={`flex items-center rounded-xl border focus-within:border-stone-900 focus-within:ring-2 focus-within:ring-accent/40 ${
+            big ? "border-transparent bg-stone-100" : "border-stone-300 bg-white"
+          }`}
+        >
+          {prefix && <span className={`pl-3 text-stone-500 ${big ? "font-display text-xl font-bold" : ""}`}>{prefix}</span>}
           <input
             id={id}
             inputMode={inputMode}
-            className="w-full min-w-0 rounded-lg bg-transparent px-2 py-2.5 text-base text-stone-900 focus:outline-none"
+            className={`w-full min-w-0 rounded-lg bg-transparent px-2 text-stone-900 focus:outline-none ${
+              big ? "py-1.5 font-display text-[30px] leading-tight font-extrabold tabular-nums" : "py-2.5 text-base"
+            }`}
             value={text}
             onChange={(e) => {
               setText(e.target.value);

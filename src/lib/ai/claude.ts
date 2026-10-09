@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { LearnedModel } from "@/lib/learning/learn";
-import { isCategoryId } from "@/lib/pricing/categories";
+import { categoryById, isCategoryId } from "@/lib/pricing/categories";
 import type { JobEstimate } from "@/lib/pricing/types";
 import { PHOTO_ANALYSIS_SYSTEM, RATE_CARD_SYSTEM, photoAnalysisInstructions } from "./prompts";
 import {
@@ -109,22 +109,37 @@ export async function readRateCard(photos: Photo[]): Promise<RateCard> {
 export function toEstimate(a: PhotoAnalysis, flatItems: AnalyzeRequest["flatItems"]): JobEstimate {
   const pos = (n: number) => (Number.isFinite(n) && n > 0 ? n : 0);
   const count = (n: number) => Math.max(1, Math.round(pos(n)));
-  const flat = new Set(flatItems.map((i) => i.id));
+  // Match the owner's items forgivingly: "Fridge" for "fridge", or the item's name instead of its id.
+  const key = (s: string) => s.trim().toLowerCase();
+  const flat = new Map<string, string>();
+  for (const i of flatItems) flat.set(key(i.name), i.id);
+  for (const i of flatItems) flat.set(key(i.id), i.id);
+  const flatId = (s: string) => (s.trim() ? (flat.get(key(s)) ?? null) : null);
 
   return {
     summary: a.summary,
     lines: a.lines
-      .filter((l) => pos(l.cubic_yards_total) > 0 || flat.has(l.flat_rate_item_id))
-      .map((l, i) => ({
-        id: `ai-${i}`,
-        description: l.description,
-        quantity: count(l.quantity),
-        cubicYards: pos(l.cubic_yards_total),
-        weightLbs: Math.round(pos(l.weight_lbs_total)),
-        material: l.material,
-        category: isCategoryId(l.category) ? l.category : "other",
-        itemId: flat.has(l.flat_rate_item_id) ? l.flat_rate_item_id : null,
-      })),
+      .filter((l) => pos(l.cubic_yards_total) > 0 || flatId(l.flat_rate_item_id))
+      .map((l, i) => {
+        const quantity = count(l.quantity);
+        const category = isCategoryId(l.category) ? l.category : "other";
+        // A flat-rate item still rides in the trailer; if the AI left its size out, use the typical one.
+        const typical = categoryById(category);
+        const each = typical.unit === "each" ? (typical.cubicYards[0] + typical.cubicYards[1]) / 2 : 0.25;
+        const cubicYards = pos(l.cubic_yards_total) || each * quantity;
+        const weightLbs =
+          pos(l.weight_lbs_total) || (typical.unit === "each" ? typical.lbs * quantity : typical.lbs * cubicYards);
+        return {
+          id: `ai-${i}`,
+          description: l.description,
+          quantity,
+          cubicYards,
+          weightLbs: Math.round(weightLbs),
+          material: l.material,
+          category,
+          itemId: flatId(l.flat_rate_item_id),
+        };
+      }),
     scope: a.scope,
     prohibitedItems: a.prohibited_items,
     stairsFlights: Math.round(pos(a.stairs_flights)),

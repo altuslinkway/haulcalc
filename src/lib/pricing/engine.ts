@@ -8,8 +8,15 @@ import type { EstimateLine, FlatItem, JobDetails, JobEstimate, Quote, QuoteLine,
 // the market research in reports/Junk removal cost drivers.md.
 
 const LBS_PER_TON = 2000;
-/** Normal junk weighs about this much; anything heavier pays the heavy-load rate. */
-const INCLUDED_LBS_PER_CUBIC_YARD = 200;
+/**
+ * The load prices cover junk up to this heavy (household junk and yard waste
+ * run 150–300 lbs a yard); concrete, dirt, shingles and the like pay the heavy-load rate.
+ */
+const INCLUDED_LBS_PER_CUBIC_YARD = 300;
+/** A learned or typed correction beyond this is a mistake, not a pattern. */
+const CALIBRATION_LIMITS = { min: -50, max: 200 };
+/** Fractions of a trailer this close to a boundary count as on it, so labels, prices and trips agree. */
+const EPS = 1e-3;
 /** Spread around what's visible in the photos, by how sure the AI is. */
 const SPREAD = { high: 0.05, medium: 0.1, low: 0.2 };
 /** Added to the top of the range for things the photos don't show. */
@@ -33,6 +40,11 @@ const sum = <T>(xs: T[], f: (x: T) => number) => xs.reduce((s, x) => s + f(x), 0
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 const yards = (n: number) => Math.round(n * 10) / 10;
 
+/** Trailer space the math uses. A blank or zero size in settings would otherwise divide by zero. */
+export function capacityOf(settings: Settings): number {
+  return Math.max(1, settings.trailer.cubicYards || 0);
+}
+
 /** Load sizes as a share of the trailer, in the order the owner prices them. */
 export const LOAD_SIZES = [
   { key: "quarter", label: "1/4", fraction: 0.25 },
@@ -45,39 +57,47 @@ export const LOAD_SIZES = [
  * Price for a share of one trailer. The four load prices are points on a
  * line that starts at the minimum charge: with 1/4 = $255 and 1/2 = $430, a
  * 3/8 load is $342.50. Beyond one trailer, each full load is charged at the
- * full price and the rest is priced on the same line.
+ * full price and the rest is priced on the same line. A bigger load never
+ * costs less, even if a price was typed out of order.
  */
 export function loadPrice(fraction: number, settings: Settings): number {
-  if (fraction <= 0) return 0;
-  const { loadPrices } = settings;
-  if (fraction > 1 + 1e-9) {
-    const fullLoads = Math.floor(fraction + 1e-9);
+  if (!(fraction > 0)) return 0;
+  const points = loadCurve(settings);
+  const full = points[points.length - 1][1];
+  if (fraction > 1 + EPS) {
+    const fullLoads = Math.floor(fraction + EPS);
     const rest = fraction - fullLoads;
-    return fullLoads * loadPrices.full + (rest > 1e-9 ? loadPrice(rest, settings) : 0);
+    return fullLoads * full + (rest > EPS ? loadPrice(rest, settings) : 0);
   }
-  let x0 = 0;
-  let y0 = Math.min(settings.minimumCharge, loadPrices.quarter);
+  for (let i = 1; i < points.length; i++) {
+    const [x0, y0] = points[i - 1];
+    const [x1, y1] = points[i];
+    if (fraction <= x1) return y0 + ((fraction - x0) / (x1 - x0)) * (y1 - y0);
+  }
+  return full;
+}
+
+function loadCurve(settings: Settings): [number, number][] {
+  const { loadPrices } = settings;
+  const points: [number, number][] = [[0, Math.max(0, Math.min(settings.minimumCharge, loadPrices.quarter))]];
   for (const size of LOAD_SIZES) {
-    const y1 = loadPrices[size.key];
-    if (fraction <= size.fraction + 1e-9) return y0 + ((fraction - x0) / (size.fraction - x0)) * (y1 - y0);
-    x0 = size.fraction;
-    y0 = y1;
+    points.push([size.fraction, Math.max(points[points.length - 1][1], loadPrices[size.key] || 0)]);
   }
-  return loadPrices.full;
+  return points;
 }
 
 /** The load size a share of the trailer rounds up to (a hair over still counts). */
 function sizeName(fraction: number): string {
-  if (fraction < 0.125 - 1e-3) return "Small";
-  return LOAD_SIZES.find((s) => fraction <= s.fraction + 1e-3)?.label ?? "Full";
+  if (fraction < 0.125 - EPS) return "Small";
+  return LOAD_SIZES.find((s) => fraction <= s.fraction + EPS)?.label ?? "Full";
 }
 
 /** "1/2 load", "1/4 to 1/2 load", "1 to 2 loads"; empty for nothing. */
 export function sizeLabel(fractions: Range): string {
   if (fractions.high <= 0) return "";
-  if (fractions.high > 1 + 1e-3) {
-    const low = Math.max(1, Math.ceil(fractions.low - 1e-3));
-    const high = Math.ceil(fractions.high - 1e-3);
+  if (fractions.high > 1 + EPS) {
+    const low = Math.max(1, Math.ceil(fractions.low - EPS));
+    const high = Math.ceil(fractions.high - EPS);
     return low === high ? `${high} loads` : `${low} to ${high} loads`;
   }
   const low = sizeName(fractions.low);
@@ -90,19 +110,26 @@ export function flatItemFor(line: EstimateLine, settings: Settings): FlatItem | 
   return line.itemId ? settings.flatItems.find((i) => i.id === line.itemId) : undefined;
 }
 
-/** The share of the high end added for things the photos don't show. */
+/** The share of the high end added for things the photos don't show. None once the owner has set the size. */
 export function unseenPctFor(estimate: JobEstimate): number {
+  if (estimate.sizedByOwner) return 0;
   return estimate.scope === "multi_area" || estimate.confidence === "low" ? UNSEEN_PCT_BIG_JOB : UNSEEN_PCT;
 }
 
-/** The owner's own correction wins; otherwise what HaulCalc learned across owners, if they use it. */
+/**
+ * The owner's own correction wins; otherwise what HaulCalc learned across
+ * owners, if they use it. Corrections fix the AI's guesses, so none applies
+ * once the owner has set the size themselves.
+ */
 export function calibrationFor(
   settings: Settings,
   estimate: JobEstimate,
 ): { pct: number; source: "owner" | "network" | null } {
-  if (settings.calibrationPct !== null) return { pct: settings.calibrationPct, source: "owner" };
+  const clamp = (n: number) => Math.min(CALIBRATION_LIMITS.max, Math.max(CALIBRATION_LIMITS.min, n || 0));
+  if (estimate.sizedByOwner) return { pct: 0, source: null };
+  if (settings.calibrationPct !== null) return { pct: clamp(settings.calibrationPct), source: "owner" };
   if (settings.learning.useNetwork && estimate.networkCalibrationPct) {
-    return { pct: estimate.networkCalibrationPct, source: "network" };
+    return { pct: clamp(estimate.networkCalibrationPct), source: "network" };
   }
   return { pct: 0, source: null };
 }
@@ -110,9 +137,11 @@ export function calibrationFor(
 /**
  * Multipliers that turn the visible load into the quoted low–high range: a
  * spread by AI confidence, the learned correction, and a cushion on the high
- * end for what the photos don't show.
+ * end for what the photos don't show. When the owner has said how big the
+ * load is, that's the size: no range.
  */
 export function rangeFactors(settings: Settings, estimate: JobEstimate): Range {
+  if (estimate.sizedByOwner) return { low: 1, high: 1 };
   const spread = SPREAD[estimate.confidence] ?? SPREAD.medium;
   const calibration = 1 + calibrationFor(settings, estimate).pct / 100;
   return {
@@ -124,7 +153,7 @@ export function rangeFactors(settings: Settings, estimate: JobEstimate): Range {
 export function computeQuote(settings: Settings, estimate: JobEstimate, details: JobDetails): Quote {
   const { extras, costs } = settings;
   const warnings: string[] = [];
-  const capacity = Math.max(0.5, settings.trailer.cubicYards);
+  const capacity = capacityOf(settings);
   const payload = settings.trailer.payloadLbs > 0 ? settings.trailer.payloadLbs : Infinity;
 
   // ---- What's in the job ----
@@ -153,9 +182,9 @@ export function computeQuote(settings: Settings, estimate: JobEstimate, details:
   const totalLbs = range(weight.low + flatLbs, weight.high + flatLbs);
 
   const tripsFor = (cy: number, lbs: number) =>
-    Math.max(1, Math.ceil(cy / capacity - 1e-9), Math.ceil(lbs / payload - 1e-9));
+    Math.max(1, Math.ceil(cy / capacity - EPS), Math.ceil(lbs / payload - EPS));
   const trips = { low: tripsFor(totalCy.low, totalLbs.low), high: tripsFor(totalCy.high, totalLbs.high) };
-  const weightLimited = trips.high > Math.max(1, Math.ceil(totalCy.high / capacity - 1e-9));
+  const weightLimited = trips.high > Math.max(1, Math.ceil(totalCy.high / capacity - EPS));
 
   const flights = details.stairsFlights ?? estimate.stairsFlights;
   const roundTripMiles = Math.max(0, details.distanceMiles) * 2;
@@ -166,7 +195,9 @@ export function computeQuote(settings: Settings, estimate: JobEstimate, details:
   if (loadCy > 0) {
     lines.push({
       label: size,
-      detail: `${yards(cubicYards.low)}–${yards(cubicYards.high)} yd³ of your ${yards(capacity)} yd³, room left for what the photos don't show`,
+      detail: estimate.sizedByOwner
+        ? `${yards(cubicYards.high)} yd³ of your ${yards(capacity)} yd³, sized by you`
+        : `${yards(cubicYards.low)}–${yards(cubicYards.high)} yd³ of your ${yards(capacity)} yd³, with room for what the photos don't show`,
       amount: range(round(loadPrice(fraction.low, settings)), round(loadPrice(fraction.high, settings))),
     });
   }
@@ -205,12 +236,9 @@ export function computeQuote(settings: Settings, estimate: JobEstimate, details:
     lines.push({ label: "Heavy load", detail: `${money(heavyRate)} a ton over normal junk`, amount: heavy });
   }
 
-  const subtotal = { low: sum(lines, (l) => l.amount.low), high: sum(lines, (l) => l.amount.high) };
+  const subtotal = { low: roundTo5(sum(lines, (l) => l.amount.low)), high: roundTo5(sum(lines, (l) => l.amount.high)) };
   const minimumApplied = subtotal.low < settings.minimumCharge;
-  const total = range(
-    Math.max(roundTo5(subtotal.low), settings.minimumCharge),
-    Math.max(roundTo5(subtotal.high), settings.minimumCharge),
-  );
+  const total = range(Math.max(subtotal.low, settings.minimumCharge), Math.max(subtotal.high, settings.minimumCharge));
   const suggested = total.low === total.high ? total.low : roundTo5((total.low + total.high) / 2);
 
   // ---- What you'd keep (a smaller job means both a lower price and lower costs) ----

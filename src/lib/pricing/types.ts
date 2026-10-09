@@ -100,6 +100,8 @@ export interface JobEstimate {
   questionsForCustomer: string[];
   /** How far off similar jobs have been across all owners: +8 means they ran 8% bigger. */
   networkCalibrationPct: number;
+  /** The owner tapped a load size, so the load is that size: no range or correction on top. */
+  sizedByOwner?: boolean;
 }
 
 /** Details the owner knows that photos can't show. */

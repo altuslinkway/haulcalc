@@ -73,7 +73,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <nav
         aria-label="App"
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white pb-[max(env(safe-area-inset-bottom),12px)]"
+        className="fixed inset-x-0 bottom-0 z-20 bg-stone-900 pb-[max(env(safe-area-inset-bottom),12px)]"
       >
         <div className="mx-auto grid max-w-xl grid-cols-3 px-2 pt-2">
           {tabs.map((t) => {
@@ -84,7 +84,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 href={t.href}
                 aria-current={active ? "page" : undefined}
                 className={`relative flex min-h-[52px] flex-col items-center justify-center gap-1 text-xs ${
-                  active ? "font-bold text-stone-900" : "font-semibold text-stone-500"
+                  active ? "font-extrabold text-accent" : "font-semibold text-stone-400"
                 }`}
               >
                 <svg
@@ -102,7 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </svg>
                 {t.label}
                 {t.href === "/jobs" && waiting > 0 && (
-                  <span className="absolute top-1 left-[calc(50%+6px)] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-extrabold text-stone-900">
+                  <span className="absolute top-1 left-[calc(50%+6px)] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-extrabold text-stone-900 ring-2 ring-stone-900">
                     <span className="sr-only">, needing feedback: </span>
                     {waiting}
                   </span>
